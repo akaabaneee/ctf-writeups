@@ -114,6 +114,8 @@ class Handler(BaseHTTPRequestHandler):
     # ---------- routes ----------
     def do_GET(self):
         path = unquote(urlparse(self.path).path)
+        if path == "/api/health":
+            return self.send_json({"mode": "server", "configured": True, "authed": True})
         if path == "/api/writeups":
             items = []
             for p in WRITEUPS.glob("*.json"):

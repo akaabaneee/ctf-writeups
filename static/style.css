@@ -496,3 +496,19 @@ body.resizing, body.resizing * { cursor: ew-resize !important; user-select: none
 
 .mode-note { margin-top: 12px !important; font-size: 12.5px; color: var(--text2) !important; background: rgba(251, 191, 36, .07); border: 1px solid rgba(251, 191, 36, .3); padding: 7px 11px; border-radius: 8px; display: inline-block; }
 .mode-note b { color: var(--warn); font-weight: 600; }
+
+/* Connexion / configuration (mode cloud) */
+.overlay.lock { background: radial-gradient(800px 500px at 50% 20%, rgba(0, 229, 155, .08), transparent 60%), rgba(4, 6, 9, .92); align-items: center; padding-top: 0; }
+.modal.login { width: min(380px, 92vw); display: flex; flex-direction: column; gap: 10px; text-align: left; margin: 0; }
+.modal.login p { margin: 0 0 4px; }
+.modal.login h3 { margin: 4px 0 0; font-size: 20px; }
+.login-logo { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; border: 1px solid var(--accent-line); background: radial-gradient(circle at 30% 20%, #0f3a2c, #04140e 70%); box-shadow: 0 0 26px rgba(0, 229, 155, .25); }
+.login-logo svg { width: 24px; height: 24px; fill: var(--accent); filter: drop-shadow(0 0 6px rgba(0, 229, 155, .7)); }
+.login .prompt { margin: 6px 0 0; font-size: 12px; }
+.login-err { color: var(--danger); font: 12.5px var(--mono); }
+.login .btn-primary:disabled { opacity: .6; }
+.shake { animation: shake .35s; }
+@keyframes shake { 20%, 60% { transform: translateX(-7px); } 40%, 80% { transform: translateX(7px); } }
+.modal code { font-family: var(--mono); font-size: 12px; background: var(--panel3); padding: 1px 6px; border-radius: 5px; color: var(--accent2); }
+ol.setup { margin: 0 0 18px; padding-left: 20px; color: var(--text2); font-size: 13.5px; display: grid; gap: 8px; }
+.mode-note .btn { margin-left: 8px; vertical-align: middle; }

@@ -50,6 +50,7 @@ const META_KEYS = ["title", "ctf", "category", "difficulty", "points", "date", "
 const serverApi = {
   async req(method, url, body) {
     const r = await fetch(url, { method, headers: body !== undefined ? { "Content-Type": "application/json" } : {}, body: body !== undefined ? JSON.stringify(body) : undefined });
+    if (r.status === 401 && state.mode === "cloud") { await showLogin(); return serverApi.req(method, url, body); }
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
     return r.json();
   },
@@ -133,17 +134,139 @@ let api = serverApi;
 
 async function detectMode() {
   try {
-    const r = await fetch("/api/writeups", { cache: "no-store" });
-    if (r.ok && (r.headers.get("content-type") || "").includes("json")) return "server";
+    const r = await fetch("/api/health", { cache: "no-store" });
+    if ((r.headers.get("content-type") || "").includes("json")) {
+      const h = await r.json();
+      if (h.mode === "cloud" || h.mode === "server") return h;
+    }
+    const w = await fetch("/api/writeups", { cache: "no-store" }); // ancien server.py
+    if (w.ok && (w.headers.get("content-type") || "").includes("json")) return { mode: "server", configured: true, authed: true };
   } catch {}
-  return "local";
+  return { mode: "local" };
+}
+
+/* ---- Cloud (Vercel) : connexion par mot de passe ---- */
+let loginPromise = null;
+function showLogin() {
+  if (loginPromise) return loginPromise;
+  loginPromise = new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "overlay lock";
+    ov.id = "lockOverlay";
+    ov.innerHTML = `
+      <form class="modal login">
+        <div class="login-logo"><svg viewBox="0 0 24 24"><path d="M6 21V3h1.8v1.3c3.2-1.8 6.2 1 9.4-.4v8.7c-3.2 1.4-6.2-1.4-9.4.4V21z"/></svg></div>
+        <div class="prompt"><span class="u">guest@ctf</span>:<span class="p">~</span>$ sudo ./writeups</div>
+        <h3>Accès protégé</h3>
+        <p>Entre le mot de passe du site (variable <code>CW_PASSWORD</code> sur Vercel).</p>
+        <input class="input mono" type="password" name="pw" placeholder="mot de passe" autocomplete="current-password" required>
+        <div class="login-err" hidden></div>
+        <button class="btn-primary wide" type="submit">Se connecter</button>
+      </form>`;
+    document.body.appendChild(ov);
+    const form = $("form", ov), err = $(".login-err", ov), input = $("input", ov);
+    input.focus();
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      err.hidden = true;
+      $("button", form).disabled = true;
+      const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: input.value }) }).catch(() => null);
+      $("button", form).disabled = false;
+      if (r?.ok) { ov.remove(); loginPromise = null; resolve(); return; }
+      err.textContent = r ? (await r.json().catch(() => ({}))).error || "Erreur" : "Serveur injoignable";
+      err.hidden = false;
+      input.select();
+      form.classList.remove("shake"); void form.offsetWidth; form.classList.add("shake");
+    };
+  });
+  return loginPromise;
+}
+
+function showSetup() {
+  const ov = document.createElement("div");
+  ov.className = "overlay lock";
+  ov.innerHTML = `
+    <div class="modal" style="width:min(560px,94vw)">
+      <h3>⚙ Dernière étape : configurer le stockage</h3>
+      <p>Le site est en ligne, mais il faut lui donner un endroit où enregistrer tes writeups pour toujours. Sur <b>vercel.com</b>, dans ton projet :</p>
+      <ol class="setup">
+        <li><b>Storage</b> → <b>Create Database</b> → <b>Blob</b> → crée-le et <b>connecte-le</b> à ce projet.</li>
+        <li><b>Settings</b> → <b>Environment Variables</b> → ajoute <code>CW_PASSWORD</code> = ton mot de passe (long et unique).</li>
+        <li><b>Deployments</b> → les <b>⋯</b> du dernier déploiement → <b>Redeploy</b>.</li>
+      </ol>
+      <div class="acts"><button class="btn-primary" onclick="location.reload()">J'ai fini, recharger</button></div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
+async function logout() {
+  await flush();
+  await fetch("/api/logout", { method: "POST" });
+  location.reload();
+}
+
+/* ---- Transfert des writeups restés dans le navigateur vers le serveur / le cloud ---- */
+async function browserWriteups() {
+  try {
+    const dbs = indexedDB.databases ? await indexedDB.databases() : [{ name: "ctf-writeups" }];
+    if (!dbs.some((d) => d.name === "ctf-writeups")) return [];
+    return await idb.all("writeups");
+  } catch { return []; }
+}
+async function offerMigration() {
+  const ws = await browserWriteups();
+  if (!ws.length) return;
+  const note = $("#modeNote");
+  note.hidden = false;
+  note.innerHTML = `📦 <b>${ws.length} writeup${ws.length > 1 ? "s" : ""}</b> enregistré${ws.length > 1 ? "s" : ""} uniquement dans ce navigateur. <button class="btn sm" id="migrateBtn">Les mettre à l'abri ${state.mode === "cloud" ? "dans le cloud" : "sur le disque"}</button>`;
+  $("#migrateBtn").onclick = async () => {
+    $("#migrateBtn").disabled = true;
+    $("#migrateBtn").textContent = "transfert…";
+    let n = 0;
+    for (const w of ws) {
+      try {
+        const { id, created, updated, text, ...rest } = w;
+        rest.content = await uploadDataImages(rest.content);
+        await api.create(rest);
+        await idb.put("trash", { ...w, id: w.id + "-migre-" + Date.now() }); // copie de sécurité locale
+        await idb.del("writeups", w.id);
+        n++;
+      } catch (e) { toast("⚠ " + (w.title || "Sans titre") + " : " + e.message); }
+    }
+    state.list = await api.list();
+    renderAll();
+    note.hidden = true;
+    toast(`✔ ${n} writeup${n > 1 ? "s" : ""} transféré${n > 1 ? "s" : ""}`);
+  };
+}
+
+/* Remplace les images intégrées (data:...) par des fichiers envoyés au serveur */
+async function uploadDataImages(html) {
+  if (!html || !html.includes("data:image")) return html;
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  for (const img of div.querySelectorAll('img[src^="data:image"]')) {
+    try {
+      const blob = await (await fetch(img.src)).blob();
+      const r = await fetch("/api/upload", { method: "POST", headers: { "Content-Type": blob.type || "image/png" }, body: blob });
+      if (r.ok) img.src = (await r.json()).location;
+    } catch {}
+  }
+  return div.innerHTML;
 }
 
 /* ---- Sauvegarde / import (les deux modes) ---- */
 async function backup() {
   if (state.mode === "server") { location.href = "/api/export"; return; }
-  const writeups = await idb.all("writeups");
-  const data = { app: "ctf-writeups", version: 1, exported: new Date().toISOString(), writeups, cheatsheet: await localApi.cheat() };
+  await flush();
+  let writeups;
+  if (state.mode === "cloud") {
+    toast("Préparation de la sauvegarde…");
+    writeups = [];
+    for (const w of state.list) { const d = await api.get(w.id); d.content = await inlineImages(d.content); writeups.push(d); }
+  } else writeups = await idb.all("writeups");
+  const cheatsheet = state.mode === "cloud" ? state.custom : await localApi.cheat();
+  const data = { app: "ctf-writeups", version: 1, exported: new Date().toISOString(), writeups, cheatsheet };
   download(`writeups-backup-${today()}.json`, JSON.stringify(data), "application/json");
   pref.set("lastBackup", Date.now());
   toast(`Sauvegarde téléchargée (${writeups.length} writeup${writeups.length > 1 ? "s" : ""})`);
@@ -159,7 +282,7 @@ async function importBackup(file) {
   await flush();
   for (const w of ws) {
     if (state.mode === "local") await localApi.create(w);
-    else { const { id, created, updated, text, ...rest } = w; await api.create(rest); }
+    else { const { id, created, updated, text, ...rest } = w; rest.content = await uploadDataImages(rest.content); await api.create(rest); }
   }
   if (Array.isArray(data.cheatsheet) && data.cheatsheet.length) {
     const known = new Set(state.custom.map((c) => c.id));
@@ -509,7 +632,7 @@ function renderList() {
   const groupBy = $("#groupBy").value;
   const n = state.list.length;
   const flags = state.list.filter((w) => w.status === "solved").length;
-  $("#countLabel").textContent = `${n} writeup${n > 1 ? "s" : ""} · ${flags} flag${flags > 1 ? "s" : ""}${state.mode === "local" ? " · navigateur" : ""}`;
+  $("#countLabel").textContent = `${n} writeup${n > 1 ? "s" : ""} · ${flags} flag${flags > 1 ? "s" : ""}${{ local: " · navigateur", cloud: " · ☁ cloud" }[state.mode] || ""}`;
   if (!items.length) {
     $("#list").innerHTML = `<div class="list-empty">${n ? "// aucun résultat" : "// vide — crée ton premier writeup"}</div>`;
     return;
@@ -1114,6 +1237,7 @@ const ACTIONS = [
   { t: "Télécharger une sauvegarde", i: "zip", run: () => backup() },
   { t: "Importer une sauvegarde (.json)", i: "insert", run: () => $("#importFile").click() },
   { t: "Raccourcis clavier", i: "help", run: () => showHelp() },
+  { t: "Se déconnecter", i: "x", cloud: true, run: () => logout() },
 ];
 
 function makeOverlay(html) {
@@ -1142,7 +1266,7 @@ function openPalette(initial = "") {
   };
   const render = () => {
     const q = input.value.trim();
-    const acts = ACTIONS.filter((a) => (!a.need || state.current) && (!q || matchAll(a.t, q))).map((a) => ({ type: "action", ...a }));
+    const acts = ACTIONS.filter((a) => (!a.need || state.current) && (!a.cloud || state.mode === "cloud") && (!q || matchAll(a.t, q))).map((a) => ({ type: "action", ...a }));
     const ws = state.list.filter((w) => !q || matchAll([w.title, w.ctf, w.category, (w.tags || []).join(" "), w.text].join(" "), q))
       .slice(0, q ? 8 : 5).map((w) => ({ type: "writeup", w }));
     const cmds = q ? allCommands().filter((c) => matchAll(`${c.cat} ${c.title} ${c.cmd} ${c.tags || ""}`, q)).slice(0, 8).map((c) => ({ type: "cmd", c })) : [];
@@ -1472,11 +1596,15 @@ function route() {
   bind();
   renderVars();
   initEditor();
-  state.mode = await detectMode();
+  const health = await detectMode();
+  state.mode = health.mode;
   if (state.mode === "local") {
     api = localApi;
-    document.body.classList.add("mode-local");
     $("#modeNote").hidden = false;
+  }
+  if (state.mode === "cloud") {
+    if (!health.configured) return showSetup();
+    if (!health.authed) await showLogin();
   }
   try {
     [state.list, state.custom] = await Promise.all([api.list(), api.cheat().catch(() => [])]);
@@ -1484,4 +1612,5 @@ function route() {
   renderAll();
   route();
   if (pref.get("drawerOpen", false)) openDrawer(state.drawerTab, { focus: false });
+  if (state.mode !== "local") offerMigration();
 })();

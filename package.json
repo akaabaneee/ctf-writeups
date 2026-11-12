@@ -1,0 +1,9 @@
+{
+  "name": "ctf-writeups",
+  "private": true,
+  "type": "module",
+  "description": "Site pour rédiger et archiver ses writeups CTF",
+  "dependencies": {
+    "@vercel/blob": "^2.9.0"
+  }
+}

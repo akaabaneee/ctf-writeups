@@ -2,6 +2,22 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "buildCommand": "",
-  "installCommand": "",
-  "outputDirectory": "static"
+  "outputDirectory": "static",
+  "rewrites": [
+    { "source": "/api/health", "destination": "/api/main?p=health" },
+    { "source": "/api/login", "destination": "/api/main?p=login" },
+    { "source": "/api/logout", "destination": "/api/main?p=logout" },
+    { "source": "/api/upload", "destination": "/api/main?p=upload" },
+    { "source": "/api/cheatsheet", "destination": "/api/main?p=cheatsheet" },
+    { "source": "/api/writeups", "destination": "/api/main?p=writeups" },
+    { "source": "/api/writeups/:id", "destination": "/api/main?p=writeups/:id" },
+    { "source": "/images/:name", "destination": "/api/main?p=img/:name" }
+  ],
+  "headers": [
+    { "source": "/(.*)", "headers": [
+      { "key": "X-Content-Type-Options", "value": "nosniff" },
+      { "key": "Referrer-Policy", "value": "same-origin" },
+      { "key": "X-Frame-Options", "value": "DENY" }
+    ] }
+  ]
 }

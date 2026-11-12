@@ -15,11 +15,16 @@ tes writeups restent sur ta machine dans `data/` (ignoré par git).
     ./lancer.sh      # démarre le serveur et ouvre http://127.0.0.1:8137
     ./arreter.sh     # arrête le serveur
 
-## Mettre en ligne (Vercel, GitHub Pages…)
-Le site marche aussi sans serveur Python : importe le repo sur Vercel, `vercel.json` sert le dossier `static/`.
-En ligne, il passe en **mode navigateur** : chaque visiteur a ses writeups stockés dans **son propre navigateur**
-(IndexedDB, images comprises) — personne ne voit ceux des autres. Pense au bouton **Backup** (fichier .json)
-et à **Importer** pour passer d'un navigateur/PC à un autre.
+## Mettre en ligne sur Vercel (writeups enregistrés pour toujours)
+1. Importe le repo sur Vercel (Framework : *Other*, rien d'autre à régler — `vercel.json` s'occupe du reste).
+2. **Storage → Create Database → Blob** → crée-le et **connecte-le** au projet (ajoute `BLOB_READ_WRITE_TOKEN`).
+3. **Settings → Environment Variables** → `CW_PASSWORD` = ton mot de passe (long et unique).
+4. **Redeploy**.
+
+Tes writeups et images sont alors stockés dans ton **Blob privé** Vercel : accessibles depuis n'importe quel
+appareil après connexion, et personne d'autre ne peut les lire. Les writeups supprimés vont dans `trash/`.
+Si le stockage n'est pas configuré, le site l'indique. Sans API du tout (hébergement purement statique),
+il passe en mode navigateur (IndexedDB) et propose ensuite de transférer ces writeups dans le cloud.
 
 ## Où sont mes données ? (mode local avec ./lancer.sh)
 - `data/writeups/*.json` : un fichier par writeup (métadonnées + contenu HTML)
