@@ -1,0 +1,4 @@
+# Données personnelles (writeups, images, cheatsheet perso) : jamais publiées
+data/
+__pycache__/
+*.tmp

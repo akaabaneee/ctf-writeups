@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>ctf://writeups</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2304140e'/><rect x='.5' y='.5' width='31' height='31' rx='7.5' fill='none' stroke='%2300e59b' stroke-opacity='.5'/><path d='M10 24V8h1.8v1.3c3-1.8 5.8 1 8.8-.4v8.2c-3 1.4-5.8-1.4-8.8.4V24z' fill='%2300e59b'/></svg>">
+<link rel="stylesheet" href="style.css">
+<script src="vendor/prism.js"></script>
+<script src="vendor/tinymce/tinymce.min.js"></script>
+<script src="cheatsheet.js"></script>
+<script src="tools.js"></script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11 12 4l9 7v9h-6v-6H9v6H3z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></symbol>
+  <symbol id="i-focus" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/></symbol>
+  <symbol id="i-insert" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 21h16"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4m0 0c4-2 7 2 11 0v9c-4 2-7-2-11 0"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></symbol>
+  <symbol id="i-print" viewBox="0 0 24 24"><path d="M7 9V3h10v6M7 18H4v-7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v7h-3"/><rect x="7" y="14" width="10" height="7"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4"/></symbol>
+  <symbol id="i-dup" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
+  <symbol id="i-cmd" viewBox="0 0 24 24"><path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4v14m0 0-3-3m3 3 3-3M17 20V6m0 0-3 3m3-3 3 3"/></symbol>
+  <symbol id="i-zip" viewBox="0 0 24 24"><path d="M4 7l2-3h12l2 3v13H4zM4 7h16M10 11h4"/></symbol>
+</svg>
+
+<div class="app" id="app">
+  <!-- ======================= SIDEBAR ======================= -->
+  <aside class="sidebar" id="sidebar">
+    <div class="side-resize" id="sideResize" title="Glisser pour redimensionner"></div>
+    <div class="brand" id="brand" title="Accueil">
+      <div class="logo"><svg viewBox="0 0 24 24"><path d="M6 21V3h1.8v1.3c3.2-1.8 6.2 1 9.4-.4v8.7c-3.2 1.4-6.2-1.4-9.4.4V21z"/></svg></div>
+      <div>
+        <div class="brand-name">ctf<b>://</b>writeups<span class="cur"></span></div>
+        <div class="brand-sub" id="countLabel">0 writeup</div>
+      </div>
+    </div>
+
+    <button class="btn-primary" id="newBtn"><svg class="ico"><use href="#i-plus"/></svg> Nouveau writeup <kbd>Ctrl Alt N</kbd></button>
+
+    <div class="field">
+      <svg class="ico"><use href="#i-search"/></svg>
+      <input id="search" placeholder="Filtrer les writeups…" autocomplete="off" spellcheck="false">
+      <kbd>/</kbd>
+    </div>
+
+    <div class="chips" id="catFilter"></div>
+
+    <div class="list-head">
+      <select class="sel" id="groupBy" title="Regrouper">
+        <option value="ctf">Par CTF</option>
+        <option value="category">Par catégorie</option>
+        <option value="none">Liste simple</option>
+      </select>
+      <select class="sel" id="statusFilter" title="Statut">
+        <option value="">Tous statuts</option>
+        <option value="solved">Résolus</option>
+        <option value="progress">En cours</option>
+        <option value="unsolved">Non résolus</option>
+      </select>
+    </div>
+
+    <nav class="list" id="list"></nav>
+
+    <div class="side-foot">
+      <button class="btn-ghost" id="paletteBtn" title="Palette de commandes"><svg class="ico"><use href="#i-cmd"/></svg> Palette <kbd>Ctrl K</kbd></button>
+      <a class="btn-ghost" href="/api/export" title="Télécharger une sauvegarde .zip de tout"><svg class="ico"><use href="#i-zip"/></svg> Backup</a>
+      <button class="btn-ghost" id="helpBtn" title="Raccourcis clavier"><svg class="ico"><use href="#i-help"/></svg></button>
+    </div>
+  </aside>
+
+  <!-- ======================= MAIN ======================= -->
+  <main class="main">
+    <div class="bg-grid"></div>
+
+    <!-- Tableau de bord -->
+    <section class="dashboard" id="dashboard">
+      <div class="dash-inner">
+        <div class="hero">
+          <div>
+            <div class="prompt"><span class="u">root@ctf</span>:<span class="p">~/writeups</span>$ <span class="typed" id="typed"></span><span class="cur"></span></div>
+            <h1><button class="icon-btn only-mobile" data-toggle-sidebar><svg class="ico"><use href="#i-menu"/></svg></button>Ton <span class="grad">arsenal</span> de writeups</h1>
+            <p>Chaque flag documenté, chaque technique retrouvable.</p>
+          </div>
+          <div class="quick">
+            <button class="btn" data-open-drawer="cheat"><svg class="ico"><use href="#i-term"/></svg> Cheatsheet <kbd>Ctrl J</kbd></button>
+            <button class="btn" data-open-drawer="tools"><svg class="ico"><use href="#i-code"/></svg> Encodeur</button>
+            <button class="btn-primary" id="newBtn2"><svg class="ico"><use href="#i-plus"/></svg> Nouveau writeup</button>
+          </div>
+        </div>
+
+        <div id="dashContent">
+          <div class="stats" id="stats"></div>
+          <div class="dash-grid">
+            <div class="panel">
+              <div class="panel-title">Activité <span id="heatInfo"></span></div>
+              <div class="heat" id="heat"></div>
+              <div class="heat-legend"><span id="heatRange"></span><span class="sw">moins <i style="background:#121a22"></i><i style="background:#0b4b37"></i><i style="background:#0a7a56"></i><i style="background:#00b97d"></i><i style="background:#00e59b"></i> plus</span></div>
+            </div>
+            <div class="panel">
+              <div class="panel-title">Catégories</div>
+              <div class="catbars" id="catbars"></div>
+              <div class="tagcloud" id="tagcloud"></div>
+            </div>
+          </div>
+          <div id="pinnedWrap"><h2 class="section-title">★ Favoris</h2><div class="cards" id="pinned"></div></div>
+          <h2 class="section-title">Récemment modifiés</h2>
+          <div class="cards" id="recent"></div>
+        </div>
+
+        <div class="empty" id="emptyState" hidden>
+<pre>
+  ███████╗██╗      █████╗  ██████╗
+  ██╔════╝██║     ██╔══██╗██╔════╝
+  █████╗  ██║     ███████║██║  ███╗
+  ██╔══╝  ██║     ██╔══██║██║   ██║
+  ██║     ███████╗██║  ██║╚██████╔╝
+  ╚═╝     ╚══════╝╚═╝  ╚═╝ ╚═════╝ </pre>
+          <h2>Aucun writeup pour l'instant</h2>
+          <p class="muted">Crée ton premier writeup : un modèle (énoncé, recon, exploitation, flag, leçons) est inséré automatiquement.</p>
+          <button class="btn-primary" id="newBtn3">Créer mon premier writeup</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Éditeur -->
+    <section class="editor-view" id="editorView" hidden>
+      <header class="doc-head">
+        <div class="doc-row">
+          <button class="icon-btn only-mobile" data-toggle-sidebar><svg class="ico"><use href="#i-menu"/></svg></button>
+          <div class="title-wrap">
+            <div class="crumbs" id="crumbs" title="Afficher / masquer les infos du challenge"><span>~/writeups/</span><span class="c1" id="crumbCtf">ctf</span><span>/</span><span class="c2" id="crumbCat">web</span><span>/</span><span class="crumb-meta" id="crumbMeta"></span></div>
+            <input class="doc-title" id="fTitle" placeholder="nom_du_challenge" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="doc-stats" id="docStats"></div>
+          <span class="save-state" id="saveState">enregistré</span>
+          <div class="doc-actions">
+            <button class="icon-btn star" id="pinBtn" data-tip="Favori"><svg class="ico"><use href="#i-star"/></svg></button>
+            <button class="icon-btn" id="metaToggle" data-tip="Infos du challenge"><svg class="ico"><use href="#i-sliders"/></svg></button>
+            <div class="menu-wrap">
+              <button class="icon-btn" id="pageBtn" data-tip="Page"><svg class="ico"><use href="#i-file"/></svg></button>
+              <div class="menu page-pop" id="pageMenu" hidden>
+                <div class="pp-lbl">largeur de la page <span id="widthLabel"></span></div>
+                <div class="seg" id="widthSeg">
+                  <button data-w="680">étroite</button><button data-w="820">a4</button><button data-w="1100">large</button><button data-w="0">pleine</button>
+                </div>
+                <input type="range" id="widthRange" min="480" max="1600" step="10" title="Largeur personnalisée">
+                <div class="pp-lbl">thème de la page</div>
+                <div class="seg" id="themeSeg"><button data-t="dark">sombre</button><button data-t="light">clair</button></div>
+                <div class="pp-tip">💡 Tu peux aussi <b>glisser les bords de la page</b> à la souris.</div>
+              </div>
+            </div>
+            <button class="icon-btn" id="focusBtn" data-tip="Mode focus (Ctrl+Maj+F)"><svg class="ico"><use href="#i-focus"/></svg></button>
+            <button class="icon-btn" id="drawerBtn" data-tip="Arsenal (Ctrl+J)"><svg class="ico"><use href="#i-term"/></svg></button>
+            <div class="menu-wrap">
+              <button class="icon-btn" id="moreBtn" data-tip="Plus"><svg class="ico"><use href="#i-more"/></svg></button>
+              <div class="menu" id="moreMenu" hidden>
+                <button data-act="print"><svg class="ico"><use href="#i-print"/></svg> Imprimer / PDF <kbd>Ctrl P</kbd></button>
+                <button data-act="html"><svg class="ico"><use href="#i-file"/></svg> Exporter en HTML</button>
+                <button data-act="md"><svg class="ico"><use href="#i-file"/></svg> Exporter en Markdown</button>
+                <button data-act="dup"><svg class="ico"><use href="#i-dup"/></svg> Dupliquer</button>
+                <hr>
+                <button data-act="del" class="danger"><svg class="ico"><use href="#i-trash"/></svg> Supprimer</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="meta collapsed" id="meta">
+          <label><span>CTF / plateforme</span><input id="fCtf" list="ctfList" placeholder="HackTheBox, Root-Me…" autocomplete="off"></label>
+          <datalist id="ctfList"></datalist>
+          <label><span>Catégorie</span><select id="fCategory"></select></label>
+          <label><span>Difficulté</span>
+            <select id="fDifficulty"><option value="">—</option><option>Très facile</option><option>Facile</option><option>Moyen</option><option>Difficile</option><option>Insane</option></select>
+          </label>
+          <label><span>Points</span><input id="fPoints" type="number" min="0" placeholder="0"></label>
+          <label><span>Date</span><input id="fDate" type="date"></label>
+          <label><span>Statut</span>
+            <select id="fStatus"><option value="solved">● Résolu</option><option value="progress">● En cours</option><option value="unsolved">● Non résolu</option></select>
+          </label>
+          <label class="wide"><span>Tags · Entrée pour ajouter</span>
+            <div class="tags-input" id="tagsBox"><input id="fTagInput" placeholder="sqli, jwt, ret2libc…" spellcheck="false"></div>
+          </label>
+          <label class="wide"><span>Flag</span>
+            <div class="flag-wrap">
+              <input id="fFlag" placeholder="FLAG{...}" autocomplete="off" spellcheck="false">
+              <button class="icon-btn sm" id="copyFlag" title="Copier le flag"><svg class="ico"><use href="#i-copy"/></svg></button>
+            </div>
+          </label>
+        </div>
+      </header>
+      <div class="editor-wrap" id="editorWrap">
+        <textarea id="editor"></textarea>
+        <div class="page-handle" data-side="l" title="Glisser pour redimensionner la page"></div>
+        <div class="page-handle" data-side="r" title="Glisser pour redimensionner la page"></div>
+        <div class="page-size" id="pageSize"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ======================= DRAWER : ARSENAL ======================= -->
+  <aside class="drawer" id="drawer" hidden>
+    <div class="drawer-resize" id="drawerResize" title="Glisser pour redimensionner"></div>
+    <div class="drawer-head">
+      <div class="tabs" id="tabs">
+        <button data-tab="cheat"><svg class="ico"><use href="#i-term"/></svg>cheatsheet</button>
+        <button data-tab="tools"><svg class="ico"><use href="#i-code"/></svg>encodeur</button>
+        <button data-tab="toc"><svg class="ico"><use href="#i-list"/></svg>sommaire</button>
+      </div>
+      <button class="icon-btn sm" id="drawerClose" title="Fermer (Échap)"><svg class="ico"><use href="#i-x"/></svg></button>
+    </div>
+
+    <!-- Cheatsheet -->
+    <section class="pane" data-pane="cheat">
+      <div class="pane-top">
+        <div class="field">
+          <svg class="ico"><use href="#i-search"/></svg>
+          <input id="cheatSearch" placeholder="nmap, reverse shell, suid, hashcat…" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="chips scroll" id="cheatCats"></div>
+        <button class="vars-toggle" id="varsToggle"><span>⚙ variables : <span id="varsSummary"></span></span><svg class="ico" style="width:14px;height:14px"><use href="#i-chev"/></svg></button>
+        <div class="vars" id="vars" hidden></div>
+      </div>
+      <div class="pane-body" id="cheatBody">
+        <div class="cmd-count"><span id="cheatCount"></span><button class="btn sm" id="addCmdBtn"><svg class="ico" style="width:13px;height:13px"><use href="#i-plus"/></svg> Ma commande</button></div>
+        <form class="custom-form" id="customForm" hidden>
+          <div class="row"><input class="input" name="title" placeholder="Titre" required><select class="sel" name="cat"></select></div>
+          <textarea class="input" name="cmd" placeholder="commande — utilise {RHOST}, {LPORT}… pour les variables" required spellcheck="false"></textarea>
+          <div class="row"><input class="input" name="tags" placeholder="mots-clés (optionnel)"><button class="btn-primary" type="submit">Ajouter</button></div>
+        </form>
+        <div id="cheatList"></div>
+      </div>
+    </section>
+
+    <!-- Encodeur -->
+    <section class="pane" data-pane="tools" hidden>
+      <div class="pane-body">
+        <textarea class="input" id="tIn" placeholder="Colle ici : base64, hex, hash, JWT, texte chiffré…" spellcheck="false"></textarea>
+        <input class="input mono" id="tKey" placeholder="clé (XOR) — texte ou hex" style="margin-top:8px;font-size:12px" spellcheck="false">
+        <div class="ops" id="ops" style="margin:12px 0"></div>
+        <div class="out-head">
+          <span class="lbl" id="outLbl">sortie</span>
+          <div style="display:flex;gap:4px">
+            <button class="btn sm" id="tUse" title="Utiliser la sortie comme entrée (enchaîner)"><svg class="ico" style="width:13px;height:13px"><use href="#i-swap"/></svg> chaîner</button>
+            <button class="btn sm" id="tCopy"><svg class="ico" style="width:13px;height:13px"><use href="#i-copy"/></svg> copier</button>
+            <button class="btn sm" id="tInsert" title="Insérer dans le writeup"><svg class="ico" style="width:13px;height:13px"><use href="#i-insert"/></svg> insérer</button>
+          </div>
+        </div>
+        <pre class="output" id="tOut"></pre>
+      </div>
+    </section>
+
+    <!-- Sommaire -->
+    <section class="pane" data-pane="toc" hidden>
+      <div class="pane-body">
+        <nav class="toc" id="toc"></nav>
+        <div class="toc-sec">Ressources</div>
+        <nav class="links">
+          <a href="https://gchq.github.io/CyberChef/" target="_blank" rel="noopener">CyberChef</a>
+          <a href="https://book.hacktricks.wiki" target="_blank" rel="noopener">HackTricks</a>
+          <a href="https://gtfobins.github.io" target="_blank" rel="noopener">GTFOBins</a>
+          <a href="https://lolbas-project.github.io" target="_blank" rel="noopener">LOLBAS</a>
+          <a href="https://github.com/swisskyrepo/PayloadsAllTheThings" target="_blank" rel="noopener">PayloadsAllTheThings</a>
+          <a href="https://www.revshells.com" target="_blank" rel="noopener">revshells.com</a>
+          <a href="https://www.dcode.fr" target="_blank" rel="noopener">dCode</a>
+          <a href="https://crackstation.net" target="_blank" rel="noopener">CrackStation</a>
+          <a href="https://factordb.com" target="_blank" rel="noopener">FactorDB</a>
+          <a href="https://www.aperisolve.com" target="_blank" rel="noopener">Aperi'Solve</a>
+          <a href="https://jwt.io" target="_blank" rel="noopener">jwt.io</a>
+          <a href="https://explainshell.com" target="_blank" rel="noopener">explainshell</a>
+        </nav>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
