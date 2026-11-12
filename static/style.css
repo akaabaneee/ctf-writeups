@@ -493,3 +493,6 @@ body.resizing, body.resizing * { cursor: ew-resize !important; user-select: none
 .side-resize { position: absolute; right: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 30; }
 .side-resize:hover, .side-resize.drag { background: linear-gradient(90deg, transparent 2px, var(--accent) 2px, var(--accent) 4px, transparent 4px); }
 @media (max-width: 860px) { .side-resize, .page-handle { display: none !important; } }
+
+.mode-note { margin-top: 12px !important; font-size: 12.5px; color: var(--text2) !important; background: rgba(251, 191, 36, .07); border: 1px solid rgba(251, 191, 36, .3); padding: 7px 11px; border-radius: 8px; display: inline-block; }
+.mode-note b { color: var(--warn); font-weight: 600; }

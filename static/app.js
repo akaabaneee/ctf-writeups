@@ -41,20 +41,135 @@ const state = {
 /* =====================================================================
    API
    ===================================================================== */
-const api = {
+/* Deux modes :
+   - "server"  : server.py tourne (./lancer.sh) → fichiers dans data/
+   - "local"   : hébergement statique (Vercel, GitHub Pages…) → tout est stocké
+                 dans le navigateur (IndexedDB), images incluses. */
+const META_KEYS = ["title", "ctf", "category", "difficulty", "points", "date", "status", "tags", "flag", "pageWidth", "pageTheme", "pinned"];
+
+const serverApi = {
   async req(method, url, body) {
     const r = await fetch(url, { method, headers: body !== undefined ? { "Content-Type": "application/json" } : {}, body: body !== undefined ? JSON.stringify(body) : undefined });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
     return r.json();
   },
-  list: () => api.req("GET", "/api/writeups"),
-  get: (id) => api.req("GET", "/api/writeups/" + id),
-  create: (d) => api.req("POST", "/api/writeups", d),
-  update: (id, d) => api.req("PUT", "/api/writeups/" + id, d),
-  remove: (id) => api.req("DELETE", "/api/writeups/" + id),
-  cheat: () => api.req("GET", "/api/cheatsheet"),
-  saveCheat: (items) => api.req("PUT", "/api/cheatsheet", items),
+  list: () => serverApi.req("GET", "/api/writeups"),
+  get: (id) => serverApi.req("GET", "/api/writeups/" + id),
+  create: (d) => serverApi.req("POST", "/api/writeups", d),
+  update: (id, d) => serverApi.req("PUT", "/api/writeups/" + id, d),
+  remove: (id) => serverApi.req("DELETE", "/api/writeups/" + id),
+  cheat: () => serverApi.req("GET", "/api/cheatsheet"),
+  saveCheat: (items) => serverApi.req("PUT", "/api/cheatsheet", items),
 };
+
+const idb = {
+  db: null,
+  open() {
+    if (this.db) return this.db;
+    this.db = new Promise((res, rej) => {
+      const r = indexedDB.open("ctf-writeups", 1);
+      r.onupgradeneeded = () => {
+        r.result.createObjectStore("writeups", { keyPath: "id" });
+        r.result.createObjectStore("trash", { keyPath: "id" });
+        r.result.createObjectStore("kv");
+      };
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    return this.db;
+  },
+  async run(store, mode, fn) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(store, mode);
+      const req = fn(tx.objectStore(store));
+      tx.oncomplete = () => res(req?.result);
+      tx.onerror = () => rej(tx.error);
+    });
+  },
+  all: (s) => idb.run(s, "readonly", (st) => st.getAll()),
+  get: (s, k) => idb.run(s, "readonly", (st) => st.get(k)),
+  put: (s, v, k) => idb.run(s, "readwrite", (st) => (k === undefined ? st.put(v) : st.put(v, k))),
+  del: (s, k) => idb.run(s, "readwrite", (st) => st.delete(k)),
+};
+
+const plainText = (html) => {
+  const d = new DOMParser().parseFromString(html || "", "text/html");
+  d.querySelectorAll("img").forEach((i) => i.remove()); // évite d'indexer les images base64
+  return (d.body.textContent || "").replace(/\s+/g, " ").slice(0, 100000);
+};
+const stripContent = ({ content, ...meta }) => ({ ...meta, text: plainText(content) });
+const newId = () => [...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+const localApi = {
+  async list() { return (await idb.all("writeups")).map(stripContent).sort((a, b) => b.updated - a.updated); },
+  async get(id) { const d = await idb.get("writeups", id); if (!d) throw new Error("introuvable"); return d; },
+  async create(body) {
+    const doc = Object.fromEntries(META_KEYS.map((k) => [k, body[k] ?? ""]));
+    Object.assign(doc, { id: body.id && /^[a-z0-9]{12}$/.test(body.id) ? body.id : newId(), content: body.content || "", tags: body.tags || [], created: body.created || Date.now(), updated: body.updated || Date.now() });
+    doc.title = doc.title || "";
+    await idb.put("writeups", doc);
+    return doc;
+  },
+  async update(id, body) {
+    const doc = await localApi.get(id);
+    for (const k of [...META_KEYS, "content"]) if (k in body) doc[k] = body[k];
+    doc.updated = Date.now();
+    await idb.put("writeups", doc);
+    const { content, ...meta } = doc;
+    return meta;
+  },
+  async remove(id) {
+    const doc = await idb.get("writeups", id);
+    if (doc) await idb.put("trash", { ...doc, id: id + "-" + Date.now() });
+    await idb.del("writeups", id);
+    return { ok: true };
+  },
+  async cheat() { return (await idb.get("kv", "cheatsheet")) || []; },
+  async saveCheat(items) { await idb.put("kv", items, "cheatsheet"); return { ok: true }; },
+};
+
+let api = serverApi;
+
+async function detectMode() {
+  try {
+    const r = await fetch("/api/writeups", { cache: "no-store" });
+    if (r.ok && (r.headers.get("content-type") || "").includes("json")) return "server";
+  } catch {}
+  return "local";
+}
+
+/* ---- Sauvegarde / import (les deux modes) ---- */
+async function backup() {
+  if (state.mode === "server") { location.href = "/api/export"; return; }
+  const writeups = await idb.all("writeups");
+  const data = { app: "ctf-writeups", version: 1, exported: new Date().toISOString(), writeups, cheatsheet: await localApi.cheat() };
+  download(`writeups-backup-${today()}.json`, JSON.stringify(data), "application/json");
+  pref.set("lastBackup", Date.now());
+  toast(`Sauvegarde téléchargée (${writeups.length} writeup${writeups.length > 1 ? "s" : ""})`);
+}
+
+async function importBackup(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch { return toast("⚠ Fichier invalide (JSON attendu)"); }
+  const ws = Array.isArray(data) ? data : data.writeups;
+  if (!Array.isArray(ws)) return toast("⚠ Ce fichier n'est pas une sauvegarde de writeups");
+  const ok = await confirmModal({ title: "Importer la sauvegarde ?", text: `${ws.length} writeup(s) vont être ajoutés${state.mode === "local" ? " (ceux qui existent déjà avec le même identifiant seront remplacés)" : ""}.`, ok: "Importer" });
+  if (!ok) return;
+  await flush();
+  for (const w of ws) {
+    if (state.mode === "local") await localApi.create(w);
+    else { const { id, created, updated, text, ...rest } = w; await api.create(rest); }
+  }
+  if (Array.isArray(data.cheatsheet) && data.cheatsheet.length) {
+    const known = new Set(state.custom.map((c) => c.id));
+    state.custom = [...state.custom, ...data.cheatsheet.filter((c) => !known.has(c.id))];
+    await saveCustom();
+  }
+  state.list = await api.list();
+  renderAll();
+  toast(`✔ ${ws.length} writeup(s) importé(s)`);
+}
 
 function toast(msg) {
   const t = $("#toast");
@@ -270,6 +385,7 @@ function initEditor() {
 
 async function uploadImage(blobInfo, progress) {
   const blob = blobInfo.blob();
+  if (state.mode === "local") { progress(100); markDirty(); return `data:${blob.type || "image/png"};base64,${blobInfo.base64()}`; }
   const r = await fetch("/api/upload", { method: "POST", headers: { "Content-Type": blob.type || "image/png" }, body: blob });
   const j = await r.json();
   if (!r.ok) throw { message: j.error || "Échec de l'envoi", remove: true };
@@ -393,7 +509,7 @@ function renderList() {
   const groupBy = $("#groupBy").value;
   const n = state.list.length;
   const flags = state.list.filter((w) => w.status === "solved").length;
-  $("#countLabel").textContent = `${n} writeup${n > 1 ? "s" : ""} · ${flags} flag${flags > 1 ? "s" : ""}`;
+  $("#countLabel").textContent = `${n} writeup${n > 1 ? "s" : ""} · ${flags} flag${flags > 1 ? "s" : ""}${state.mode === "local" ? " · navigateur" : ""}`;
   if (!items.length) {
     $("#list").innerHTML = `<div class="list-empty">${n ? "// aucun résultat" : "// vide — crée ton premier writeup"}</div>`;
     return;
@@ -995,7 +1111,8 @@ const ACTIONS = [
   { t: "Exporter en Markdown", i: "file", need: true, run: () => exportMD() },
   { t: "Imprimer / PDF", i: "print", k: "Ctrl P", need: true, run: () => printDoc() },
   { t: "Dupliquer le writeup", i: "dup", need: true, run: () => duplicateCurrent() },
-  { t: "Télécharger une sauvegarde (.zip)", i: "zip", run: () => (location.href = "/api/export") },
+  { t: "Télécharger une sauvegarde", i: "zip", run: () => backup() },
+  { t: "Importer une sauvegarde (.json)", i: "insert", run: () => $("#importFile").click() },
   { t: "Raccourcis clavier", i: "help", run: () => showHelp() },
 ];
 
@@ -1154,6 +1271,9 @@ function bind() {
   $("#brand").onclick = () => showHome();
   $("#paletteBtn").onclick = () => openPalette();
   $("#helpBtn").onclick = () => showHelp();
+  $("#backupBtn").onclick = (e) => { e.preventDefault(); backup(); };
+  $("#importBtn").onclick = () => $("#importFile").click();
+  $("#importFile").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importBackup(f); };
   $("#search").oninput = renderList;
   $("#groupBy").value = pref.get("groupBy", "ctf");
   $("#groupBy").onchange = () => { pref.set("groupBy", $("#groupBy").value); renderList(); };
@@ -1334,6 +1454,7 @@ function bind() {
   window.addEventListener("popstate", route);
   window.addEventListener("beforeunload", (e) => {
     if (!state.dirty || !state.current) return;
+    if (state.mode === "local") { saveNow(); e.preventDefault(); return; }
     try {
       const c = collect();
       fetch("/api/writeups/" + c.id, { method: "PUT", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...c, content: ed().getContent() }) });
@@ -1351,9 +1472,15 @@ function route() {
   bind();
   renderVars();
   initEditor();
+  state.mode = await detectMode();
+  if (state.mode === "local") {
+    api = localApi;
+    document.body.classList.add("mode-local");
+    $("#modeNote").hidden = false;
+  }
   try {
     [state.list, state.custom] = await Promise.all([api.list(), api.cheat().catch(() => [])]);
-  } catch { toast("⚠ Serveur injoignable — lance ./lancer.sh"); }
+  } catch (e) { toast("⚠ Impossible de charger les writeups : " + e.message); }
   renderAll();
   route();
   if (pref.get("drawerOpen", false)) openDrawer(state.drawerTab, { focus: false });

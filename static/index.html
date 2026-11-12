@@ -80,8 +80,10 @@
     <nav class="list" id="list"></nav>
 
     <div class="side-foot">
-      <button class="btn-ghost" id="paletteBtn" title="Palette de commandes"><svg class="ico"><use href="#i-cmd"/></svg> Palette <kbd>Ctrl K</kbd></button>
-      <a class="btn-ghost" href="/api/export" title="Télécharger une sauvegarde .zip de tout"><svg class="ico"><use href="#i-zip"/></svg> Backup</a>
+      <button class="btn-ghost" id="paletteBtn" title="Palette de commandes"><svg class="ico"><use href="#i-cmd"/></svg> <kbd>Ctrl K</kbd></button>
+      <a class="btn-ghost" href="/api/export" id="backupBtn" title="Télécharger une sauvegarde de tout"><svg class="ico"><use href="#i-zip"/></svg> Backup</a>
+      <button class="btn-ghost" id="importBtn" title="Importer une sauvegarde (.json)"><svg class="ico"><use href="#i-insert"/></svg></button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
       <button class="btn-ghost" id="helpBtn" title="Raccourcis clavier"><svg class="ico"><use href="#i-help"/></svg></button>
     </div>
   </aside>
@@ -98,6 +100,7 @@
             <div class="prompt"><span class="u">root@ctf</span>:<span class="p">~/writeups</span>$ <span class="typed" id="typed"></span><span class="cur"></span></div>
             <h1><button class="icon-btn only-mobile" data-toggle-sidebar><svg class="ico"><use href="#i-menu"/></svg></button>Ton <span class="grad">arsenal</span> de writeups</h1>
             <p>Chaque flag documenté, chaque technique retrouvable.</p>
+            <p class="mode-note" id="modeNote" hidden>💾 Mode navigateur : tes writeups sont enregistrés <b>dans ce navigateur</b>. Fais régulièrement un <b>Backup</b> (en bas à gauche) pour ne rien perdre.</p>
           </div>
           <div class="quick">
             <button class="btn" data-open-drawer="cheat"><svg class="ico"><use href="#i-term"/></svg> Cheatsheet <kbd>Ctrl J</kbd></button>

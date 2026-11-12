@@ -15,7 +15,13 @@ tes writeups restent sur ta machine dans `data/` (ignoré par git).
     ./lancer.sh      # démarre le serveur et ouvre http://127.0.0.1:8137
     ./arreter.sh     # arrête le serveur
 
-## Où sont mes données ?
+## Mettre en ligne (Vercel, GitHub Pages…)
+Le site marche aussi sans serveur Python : importe le repo sur Vercel, `vercel.json` sert le dossier `static/`.
+En ligne, il passe en **mode navigateur** : chaque visiteur a ses writeups stockés dans **son propre navigateur**
+(IndexedDB, images comprises) — personne ne voit ceux des autres. Pense au bouton **Backup** (fichier .json)
+et à **Importer** pour passer d'un navigateur/PC à un autre.
+
+## Où sont mes données ? (mode local avec ./lancer.sh)
 - `data/writeups/*.json` : un fichier par writeup (métadonnées + contenu HTML)
 - `data/images/`         : les images collées / glissées
 - `data/corbeille/`      : writeups supprimés (récupérables : remets le fichier dans `data/writeups/` en retirant le suffixe `-<timestamp>`)
