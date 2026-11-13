@@ -39,7 +39,9 @@ if (!process.env.BLOB_READ_WRITE_TOKEN) {
   const k = Object.keys(process.env).find((k) => k.endsWith("_READ_WRITE_TOKEN") && String(process.env[k]).startsWith("vercel_blob_rw_"));
   if (k) process.env.BLOB_READ_WRITE_TOKEN = process.env[k];
 }
-const passwordOf = (u) => (process.env["CW_PASSWORD_" + u.toUpperCase()] || (USERS[u].legacy && process.env[USERS[u].legacy]) || "").trim();
+// Nom de variable insensible à la casse : CW_PASSWORD_HUGO, CW_PASSWORD_hugo, cw_password_Hugo…
+const envCI = (name) => { const k = Object.keys(process.env).find((x) => x.toUpperCase() === name); return k ? process.env[k] : ""; };
+const passwordOf = (u) => (envCI("CW_PASSWORD_" + u.toUpperCase()) || (USERS[u].legacy && process.env[USERS[u].legacy]) || "").trim();
 const userList = () => Object.entries(USERS).map(([id, u]) => ({ id, name: u.name, ready: Boolean(passwordOf(id)) }));
 // Nouveaux stores Blob : BLOB_STORE_ID + jeton OIDC fourni par Vercel ; anciens : BLOB_READ_WRITE_TOKEN
 const hasBlob = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
