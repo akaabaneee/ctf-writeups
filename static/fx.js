@@ -218,87 +218,131 @@
     },
   };
 
-  /* 4. Hyperespace façon Star Wars : étoiles calmes → accélération (les étoiles s'étirent) → flash →
-        tunnel de traînées bleu-blanc qui défile, avec halo bleu au centre. jump() relance le saut. */
+  /* 4. Hyperespace (inspiré de Star Wars), aux couleurs du compte.
+        Étoiles réparties dans un cylindre autour de la caméra (le centre reste un « couloir » vide),
+        traînées avec flou de mouvement, parois de lumière qui défilent, nuages de gaz traversés,
+        cœur lumineux, reflet horizontal de caméra, secousses et halo lumineux (bloom).
+        Phases : calme → accélération → flash → croisière. jump() relance le saut. */
   MODES.warp = {
-    name: "Hyperespace", desc: "Saut en hyperespace façon Star Wars : accélération, étoiles étirées, flash puis tunnel bleu",
+    name: "Hyperespace", desc: "Saut en vitesse lumière : accélération, traînées, tunnel de lumière aux couleurs du compte",
     init(E) {
-      const N = Math.max(260, Math.min(760, Math.round((E.W * E.H) / 2400)));
+      const mixW = (rgb, k) => rgb.split(",").map((v) => Math.round(+v + (255 - +v) * k)).join(",");   // éclaircit vers le blanc
+      const N = Math.max(320, Math.min(900, Math.round((E.W * E.H) / 1900)));
       const spawn = (s, far) => {
-        // pas d'étoile pile au centre (sinon point fixe dans l'axe)
-        let x, y; do { x = rand(-1.6, 1.6); y = rand(-1.1, 1.1); } while (x * x + y * y < 0.012);
-        s.x = x; s.y = y; s.z = far ? 1 : rand(0.08, 1); s.b = rand(0.55, 1); s.blue = Math.random() < 0.55;
+        const th = rand(0, TAU), r = Math.random() < 0.85 ? rand(0.2, 1.35) : rand(0.04, 0.2);
+        s.x = Math.cos(th) * r * 1.45; s.y = Math.sin(th) * r;
+        s.z = far ? rand(1.0, 1.35) : rand(0.05, 1.35);
+        s.b = rand(0.45, 1); s.k = Math.random() < 0.25 ? 2 : Math.random() < 0.6 ? 0 : 1; s.w = rand(0.6, 1.5);
         return s;
       };
       const stars = Array.from({ length: N }, () => spawn({}, false));
+      const walls = Array.from({ length: 140 }, () => ({ th: rand(0, TAU), z: rand(0.05, 1.4), r: rand(1.0, 1.9), w: rand(3, 11), a: rand(0.05, 0.16), k: Math.random() < 0.5 }));
+      const clouds = Array.from({ length: 9 }, () => ({ th: rand(0, TAU), z: rand(0.15, 1.4), r: rand(0.25, 1.1), s: rand(0.5, 1.3), k: Math.random() < 0.5 }));
+      const small = document.createElement("canvas"), sctx = small.getContext("2d");
+      small.width = Math.max(1, Math.round(E.W / 5)); small.height = Math.max(1, Math.round(E.H / 5));
       const c = { x: E.W / 2, y: E.H / 2 };
-      let t = 0, v = 0.02, flash = 0, flashed = false, rot = 0;
-      const IDLE = 1.1, ACC = 1.9;           // durées (s) du calme puis de l'accélération
+      let t = 0, v = 0.03, flash = 0, flashed = false, rot = 0;
+      const IDLE = 1.0, ACC = 2.3;
       const speedAt = (tt) => {
-        if (tt < IDLE) return 0.02;
-        if (tt < IDLE + ACC) { const k = (tt - IDLE) / ACC; return 0.02 + Math.pow(k, 3.2) * 3.6; }
-        return 1.5 + Math.sin(tt * 1.1) * 0.12;   // croisière, légère respiration
+        if (tt < IDLE) return 0.03;
+        if (tt < IDLE + ACC) { const k = (tt - IDLE) / ACC; return 0.03 + Math.pow(k, 3.4) * 4.4; }
+        return 2.5 + Math.sin(tt * 0.9) * 0.22 + Math.sin(tt * 2.7) * 0.08;
       };
       return {
         jump() { t = 0; flashed = false; },
         draw(dt) {
-          const { ctx, W, H, mouse } = E;
-          t += dt;
-          v = speedAt(t);
-          if (!flashed && t > IDLE + ACC * 0.93) { flash = 1; flashed = true; }
-          const hyper = Math.min(1, Math.max(0, (v - 0.15) / 1.3));     // 0 = étoiles, 1 = hyperespace
-          // fond : espace profond (en sombre), effacement complet à chaque image
-          if (E.light) ctx.clearRect(0, 0, W, H);
-          else { ctx.fillStyle = "#01030a"; ctx.fillRect(0, 0, W, H); }
-          const tx = mouse.x > -500 ? W / 2 + (mouse.x - W / 2) * 0.12 : W / 2, ty = mouse.y > -500 ? H / 2 + (mouse.y - H / 2) * 0.12 : H / 2;
+          const { ctx, W, H, mouse } = E, dark = !E.light;
+          t += dt; v = speedAt(t);
+          const accK = t > IDLE && t < IDLE + ACC ? (t - IDLE) / ACC : 0;
+          if (!flashed && t > IDLE + ACC * 0.94) { flash = 1; flashed = true; }
+          const hyper = Math.min(1, Math.max(0, (v - 0.12) / 2.0));
+          const C1 = E.c1, C2 = E.c2, HEAD1 = mixW(C1, 0.6), HEAD2 = mixW(C2, 0.6);
+          const cols = [C1, C2, mixW(C1, 0.85)], heads = [HEAD1, HEAD2, "255,255,255"];
+          // fond
+          if (dark) { ctx.fillStyle = "#010406"; ctx.fillRect(0, 0, W, H); } else ctx.clearRect(0, 0, W, H);
+          // centre (suit un peu la souris) + secousses de caméra
+          const tx = mouse.x > -500 ? W / 2 + (mouse.x - W / 2) * 0.1 : W / 2, ty = mouse.y > -500 ? H / 2 + (mouse.y - H / 2) * 0.1 : H / 2;
           c.x += (tx - c.x) * Math.min(1, dt * 1.5); c.y += (ty - c.y) * Math.min(1, dt * 1.5);
-          rot += dt * 0.04 * hyper;
+          const shake = accK * accK * 4 + hyper * 0.9;
+          const cx = c.x + rand(-shake, shake), cy = c.y + rand(-shake, shake);
+          rot += dt * 0.035 * hyper;
           const F = Math.max(W, H) * 0.42, cr = Math.cos(rot), sr = Math.sin(rot);
-          // halo bleu au fond du tunnel
-          if (hyper > 0.02) {
-            const R = Math.max(W, H) * (0.18 + hyper * 0.28);
-            const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, R);
-            g.addColorStop(0, E.light ? `rgba(70,130,255,${0.16 * hyper})` : `rgba(150,200,255,${0.42 * hyper})`);
-            g.addColorStop(0.35, E.light ? `rgba(70,130,255,${0.08 * hyper})` : `rgba(60,120,255,${0.16 * hyper})`);
-            g.addColorStop(1, "rgba(30,60,200,0)");
-            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+          const P = (x, y, z) => { const rx = x * cr - y * sr, ry = x * sr + y * cr; return [cx + (rx / z) * F, cy + (ry / z) * F]; };
+          ctx.globalCompositeOperation = dark ? "lighter" : "source-over";
+          // nuages de gaz qu'on traverse
+          for (const n of clouds) {
+            n.z -= v * dt * 0.32;
+            if (n.z < 0.08) { n.z = rand(1.2, 1.4); n.th = rand(0, TAU); n.r = rand(0.25, 1.1); }
+            if (hyper < 0.05) continue;
+            const [x, y] = P(Math.cos(n.th) * n.r * 1.4, Math.sin(n.th) * n.r, n.z);
+            const R = (n.s * F * 0.45) / n.z, al = hyper * (dark ? 0.09 : 0.06) * Math.min(1, (1.4 - n.z) * 1.5) * Math.min(1, n.z * 4);
+            const g = ctx.createRadialGradient(x, y, 0, x, y, R); g.addColorStop(0, rgba(n.k ? C2 : C1, al)); g.addColorStop(1, rgba(n.k ? C2 : C1, 0));
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, TAU); ctx.fill();
           }
-          ctx.globalCompositeOperation = E.light ? "source-over" : "lighter";
+          // cœur lumineux au bout du tunnel
+          if (hyper > 0.02) {
+            const R = F * (0.12 + hyper * 0.3);
+            const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+            g.addColorStop(0, rgba(dark ? "255,255,255" : C1, (dark ? 0.55 : 0.18) * hyper));
+            g.addColorStop(0.2, rgba(dark ? HEAD1 : C1, (dark ? 0.32 : 0.12) * hyper));
+            g.addColorStop(1, rgba(C1, 0));
+            ctx.fillStyle = g; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+          }
+          // parois du tunnel : longues bandes de lumière floues qui défilent sur les bords
           ctx.lineCap = "round";
-          const tail = Math.min(0.75, 0.004 + v * 0.42);        // longueur de la traînée (en profondeur)
+          for (const w of walls) {
+            w.z -= v * dt * 0.75;
+            if (w.z < 0.05) { w.z = rand(1.2, 1.4); w.th = rand(0, TAU); }
+            if (hyper < 0.05) continue;
+            const x = Math.cos(w.th) * w.r * 1.4, y = Math.sin(w.th) * w.r;
+            const [hx, hy] = P(x, y, w.z), [qx, qy] = P(x, y, Math.min(1.5, w.z + 0.25 + v * 0.3));
+            const g = ctx.createLinearGradient(qx, qy, hx, hy); const col = w.k ? C2 : C1;
+            g.addColorStop(0, rgba(col, 0)); g.addColorStop(1, rgba(col, w.a * hyper * (dark ? 1 : 0.7)));
+            ctx.strokeStyle = g; ctx.lineWidth = w.w * (1.4 - w.z);
+            ctx.beginPath(); ctx.moveTo(qx, qy); ctx.lineTo(hx, hy); ctx.stroke();
+          }
+          // étoiles / traînées avec flou de mouvement
+          const tail = Math.min(1.1, 0.002 + v * 0.36);
           for (const s of stars) {
-            s.z -= v * dt * 0.55;
-            if (s.z <= 0.012) { spawn(s, true); continue; }
-            const zt = Math.min(1.4, s.z + tail);
-            const rx = s.x * cr - s.y * sr, ry = s.x * sr + s.y * cr;
-            const hx = c.x + (rx / s.z) * F, hy = c.y + (ry / s.z) * F;       // tête (proche)
-            const qx = c.x + (rx / zt) * F, qy = c.y + (ry / zt) * F;         // queue (lointaine)
-            if (hx < -80 || hx > W + 80 || hy < -80 || hy > H + 80) { if (s.z < 0.5) spawn(s, true); continue; }
-            const near = 1 - s.z, a = Math.min(1, (0.25 + near) * s.b);
-            const w = 0.5 + near * (1.4 + hyper * 1.8);
-            if (hyper < 0.05) {      // étoiles quasi immobiles : simples points
-              const tw = 0.75 + 0.25 * Math.sin(t * 3 + s.b * 40);     // léger scintillement
-              ctx.fillStyle = E.light ? `rgba(30,50,110,${Math.min(1, a * 1.1) * tw})` : `rgba(230,240,255,${Math.min(1, a * 1.5) * tw})`;
-              ctx.beginPath(); ctx.arc(hx, hy, 0.7 + w * 0.9, 0, TAU); ctx.fill();
+            s.z -= v * dt * 0.6;
+            if (s.z <= 0.015) { spawn(s, true); continue; }
+            const [hx, hy] = P(s.x, s.y, s.z);
+            if (hx < -100 || hx > W + 100 || hy < -100 || hy > H + 100) { spawn(s, true); continue; }
+            const near = Math.max(0, 1 - s.z / 1.35), a = Math.min(1, (0.2 + near * 1.1) * s.b) * Math.min(1, (1.35 - s.z) * 6);
+            if (hyper < 0.03) {
+              const tw = 0.75 + 0.25 * Math.sin(t * 3 + s.b * 40);
+              ctx.fillStyle = rgba(dark ? heads[s.k] : cols[s.k], a * tw);
+              ctx.beginPath(); ctx.arc(hx, hy, 0.5 + near * 1.6 * s.w, 0, TAU); ctx.fill();
               continue;
             }
-            // traînée bleue complète, puis tête blanche plus courte
-            ctx.strokeStyle = E.light
-              ? (s.blue ? `rgba(40,90,220,${a * 0.45})` : `rgba(20,40,110,${a * 0.4})`)
-              : (s.blue ? `rgba(90,150,255,${a * 0.55})` : `rgba(170,200,255,${a * 0.45})`);
-            ctx.lineWidth = w;
+            const [qx, qy] = P(s.x, s.y, Math.min(1.6, s.z + tail));
+            const g = ctx.createLinearGradient(qx, qy, hx, hy);
+            g.addColorStop(0, rgba(cols[s.k], 0));
+            g.addColorStop(0.75, rgba(cols[s.k], a * (dark ? 0.75 : 0.6)));
+            g.addColorStop(1, rgba(dark ? heads[s.k] : cols[s.k], a));
+            ctx.strokeStyle = g; ctx.lineWidth = s.w * (0.35 + near * near * 3.2);
             ctx.beginPath(); ctx.moveTo(qx, qy); ctx.lineTo(hx, hy); ctx.stroke();
-            const mx = hx + (qx - hx) * 0.3, my = hy + (qy - hy) * 0.3;
-            ctx.strokeStyle = E.light ? `rgba(10,30,90,${a * 0.6})` : `rgba(235,245,255,${a * 0.9})`;
-            ctx.lineWidth = w * 0.7;
-            ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(hx, hy); ctx.stroke();
+          }
+          // reflet horizontal de caméra (flare anamorphique)
+          if (hyper > 0.05 && dark) {
+            const g = ctx.createLinearGradient(0, 0, W, 0), al = hyper * (0.22 + Math.sin(t * 2.1) * 0.05);
+            g.addColorStop(0, rgba(C1, 0)); g.addColorStop(0.5, rgba(HEAD1, al)); g.addColorStop(1, rgba(C1, 0));
+            ctx.fillStyle = g; ctx.fillRect(0, cy - 1.2, W, 2.4);
+            ctx.fillStyle = rgba(C1, al * 0.25); ctx.fillRect(0, cy - 10, W, 20);
           }
           ctx.globalCompositeOperation = "source-over";
-          // flash au moment du saut
+          // halo lumineux (bloom) : l'image réduite puis agrandie, ajoutée par-dessus
+          if (dark && hyper > 0.02) {
+            sctx.clearRect(0, 0, small.width, small.height);
+            sctx.drawImage(ctx.canvas, 0, 0, small.width, small.height);
+            ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.55 * hyper;
+            ctx.drawImage(small, 0, 0, W, H);
+            ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
+          }
           if (flash > 0) {
-            ctx.fillStyle = E.light ? `rgba(255,255,255,${flash * 0.85})` : `rgba(210,230,255,${flash * 0.75})`;
+            ctx.fillStyle = rgba(dark ? HEAD1 : "255,255,255", flash * (dark ? 0.8 : 0.85));
             ctx.fillRect(0, 0, W, H);
-            flash = Math.max(0, flash - dt * 2.2);
+            flash = Math.max(0, flash - dt * 2.0);
           }
         },
       };
