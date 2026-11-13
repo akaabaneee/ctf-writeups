@@ -224,7 +224,7 @@
         cœur lumineux, reflet horizontal de caméra, secousses et halo lumineux (bloom).
         Phases : calme → accélération → flash → croisière. jump() relance le saut. */
   MODES.warp = {
-    name: "Hyperespace", desc: "Saut en vitesse lumière : accélération, traînées, tunnel de lumière aux couleurs du compte",
+    name: "Hyperespace", desc: "Voyage en boucle : saut en vitesse lumière, croisière, sortie près de planètes, astéroïdes, comètes…",
     init(E) {
       const mixW = (rgb, k) => rgb.split(",").map((v) => Math.round(+v + (255 - +v) * k)).join(",");   // éclaircit vers le blanc
       const N = Math.max(320, Math.min(900, Math.round((E.W * E.H) / 1900)));
@@ -241,25 +241,118 @@
       const small = document.createElement("canvas"), sctx = small.getContext("2d");
       small.width = Math.max(1, Math.round(E.W / 5)); small.height = Math.max(1, Math.round(E.H / 5));
       const c = { x: E.W / 2, y: E.H / 2 };
-      let t = 0, v = 0.03, flash = 0, flashed = false, rot = 0;
-      const IDLE = 1.0, ACC = 2.3;
-      const speedAt = (tt) => {
-        if (tt < IDLE) return 0.03;
-        if (tt < IDLE + ACC) { const k = (tt - IDLE) / ACC; return 0.03 + Math.pow(k, 3.4) * 4.4; }
-        return 2.5 + Math.sin(tt * 0.9) * 0.22 + Math.sin(tt * 2.7) * 0.08;
-      };
+      let t = 0, v = 0.03, flash = 0, rot = 0;
+
+      /* ---- Le voyage : étoiles → accélération → croisière → sortie → dérive dans l'espace → nouveau saut ---- */
+      const ACC = 2.3, DEC = 1.8;
+      const NEXT = { stars: "accel", accel: "cruise", cruise: "decel", decel: "space", space: "accel" };
+      const st = { name: "stars", t: 0, dur: 1, vFrom: 0, flashed: false };
+      function go(name) {
+        st.name = name; st.t = 0; st.vFrom = v; st.flashed = false;
+        st.dur = { stars: 1.0, accel: ACC, cruise: rand(9, 15), decel: DEC, space: rand(14, 22) }[name];
+        if (name === "decel") flash = 0.3;          // petit éclair en sortant de l'hyperespace
+        if (name === "space") newScene();
+      }
+      function step(dt) {
+        st.t += dt;
+        const k = Math.min(1, st.t / st.dur);
+        if (st.name === "accel") { v = 0.03 + Math.pow(k, 3.4) * 4.4; if (k > 0.94 && !st.flashed) { flash = 1; st.flashed = true; } }
+        else if (st.name === "cruise") v = 2.5 + Math.sin(t * 0.9) * 0.22 + Math.sin(t * 2.7) * 0.08;
+        else if (st.name === "decel") v = 0.06 + (st.vFrom - 0.06) * Math.pow(1 - k, 3);
+        else v = st.name === "space" ? 0.06 : 0.03;
+        if (st.t >= st.dur) go(NEXT[st.name]);
+      }
+
+      /* ---- Ce qu'on croise pendant la dérive : planètes, lunes, astéroïdes, nébuleuse, comète ---- */
+      const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)).join(",");
+      const PAL = [
+        { base: ["#a9d8ff", "#3a78c8", "#0b1d3d"], band: "#d6ecff", atm: "120,190,255", kind: "gas" },
+        { base: ["#ffd9a6", "#cf7a3a", "#3a1a0c"], band: "#ffe9c9", atm: "255,175,115", kind: "gas" },
+        { base: ["#ffb8a0", "#b5452c", "#2a0c08"], atm: "255,125,95", kind: "rock" },
+        { base: ["#ddcfff", "#7b5cd6", "#1c1240"], band: "#f1eaff", atm: "190,165,255", kind: "gas" },
+        { base: ["#b4f3e2", "#2c9c86", "#062a26"], atm: "125,240,215", kind: "ocean" },
+        { base: ["#9ec9ff", "#2459b8", "#06163a"], atm: "110,170,255", kind: "ocean" },
+      ];
+      const MOON = { base: ["#ececec", "#8c8c8c", "#1b1b1b"], atm: "210,210,210", kind: "rock" };
+      function planetSprite(p, ring) {
+        const S = 900, R = 170, o = document.createElement("canvas"); o.width = o.height = S;
+        const c = o.getContext("2d"); c.translate(S / 2, S / 2);
+        const tilt = rand(-0.5, 0.5);
+        const ringArc = (a0, a1) => {       // anneaux : moitié arrière avant la planète, moitié avant après
+          if (!ring) return;
+          c.save(); c.rotate(tilt);
+          for (let i = 0; i < 16; i++) { const rr = R * 1.32 + i * 9; c.beginPath(); c.ellipse(0, 0, rr, rr * 0.22, 0, a0, a1); c.strokeStyle = `rgba(${ring},${rand(0.08, 0.38).toFixed(2)})`; c.lineWidth = rand(3, 8); c.stroke(); }
+          c.restore();
+        };
+        ringArc(Math.PI, TAU);
+        const ag = c.createRadialGradient(0, 0, R * 0.95, 0, 0, R * 1.28);
+        ag.addColorStop(0, `rgba(${p.atm},.28)`); ag.addColorStop(0.3, `rgba(${p.atm},.1)`); ag.addColorStop(1, `rgba(${p.atm},0)`);
+        c.fillStyle = ag; c.beginPath(); c.arc(0, 0, R * 1.28, 0, TAU); c.fill();
+        c.save(); c.beginPath(); c.arc(0, 0, R, 0, TAU); c.clip();
+        const g = c.createRadialGradient(-R * 0.35, -R * 0.4, R * 0.1, 0, 0, R * 1.05);
+        g.addColorStop(0, p.base[0]); g.addColorStop(0.55, p.base[1]); g.addColorStop(1, p.base[2]);
+        c.fillStyle = g; c.fillRect(-R, -R, 2 * R, 2 * R);
+        if (p.kind === "gas") {        // bandes nuageuses ondulées
+          c.rotate(tilt * 0.6);
+          for (let i = 0; i < 18; i++) {
+            const y = rand(-R, R), h = rand(4, 22);
+            c.fillStyle = Math.random() < 0.5 ? `rgba(255,255,255,${rand(0.04, 0.15).toFixed(2)})` : `rgba(0,0,0,${rand(0.04, 0.15).toFixed(2)})`;
+            c.beginPath();
+            for (let x = -R; x <= R; x += 10) c.lineTo(x, y + Math.sin(x * 0.03 + i) * 4);
+            for (let x = R; x >= -R; x -= 10) c.lineTo(x, y + h + Math.sin(x * 0.03 + i) * 4);
+            c.fill();
+          }
+        } else if (p.kind === "rock") {   // cratères
+          for (let i = 0; i < 28; i++) {
+            const x = rand(-R, R), y = rand(-R, R), r = rand(4, 24), cg = c.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+            cg.addColorStop(0, "rgba(0,0,0,.3)"); cg.addColorStop(1, "rgba(0,0,0,0)"); c.fillStyle = cg; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+          }
+        } else {                          // océans : nuages blancs
+          for (let i = 0; i < 11; i++) { c.fillStyle = `rgba(255,255,255,${rand(0.12, 0.32).toFixed(2)})`; c.beginPath(); c.ellipse(rand(-R, R), rand(-R, R), rand(20, 75), rand(6, 16), rand(-0.4, 0.4), 0, TAU); c.fill(); }
+        }
+        const sh = c.createRadialGradient(-R * 0.55, -R * 0.55, R * 0.2, -R * 0.55, -R * 0.55, R * 2.0);   // côté nuit
+        sh.addColorStop(0, "rgba(0,0,0,0)"); sh.addColorStop(0.42, "rgba(0,0,0,.08)"); sh.addColorStop(0.62, "rgba(0,0,0,.62)"); sh.addColorStop(0.8, "rgba(0,0,0,.95)"); sh.addColorStop(1, "rgba(0,0,0,.98)");
+        c.fillStyle = sh; c.fillRect(-R, -R, 2 * R, 2 * R);
+        c.restore();
+        c.save(); c.beginPath(); c.arc(0, 0, R, Math.PI * 0.75, Math.PI * 1.75); c.strokeStyle = `rgba(${p.atm},.55)`; c.lineWidth = 3; c.stroke(); c.restore();
+        ringArc(0, Math.PI);
+        return { img: o, R };
+      }
+      let objs = [], neb = [], nebA = 0, nebTarget = 0, comet = null, cometAt = -1;
+      function newScene() {
+        objs = []; comet = null;
+        const side = Math.random() < 0.5 ? -1 : 1;
+        if (Math.random() < 0.95) {
+          const p = PAL[(Math.random() * PAL.length) | 0];
+          const ring = Math.random() < 0.4 ? (p.band ? hexRgb(p.band) : "225,215,195") : null;
+          objs.push({ type: "planet", sp: planetSprite(p, ring), x: side * rand(0.5, 0.95), y: rand(-0.35, 0.35), z: rand(3.0, 3.8), size: rand(0.4, 0.75), vz: 0.15 });
+          if (Math.random() < 0.55) objs.push({ type: "planet", sp: planetSprite(MOON, null), x: side * rand(0.15, 0.45), y: rand(-0.55, 0.55), z: rand(3.8, 4.6), size: rand(0.07, 0.13), vz: 0.13 });
+        }
+        if (Math.random() < 0.4) {
+          for (let i = 0; i < 50; i++) {
+            const pts = Array.from({ length: 8 }, (_, k) => { const a = (k / 8) * TAU, r = rand(0.6, 1); return [Math.cos(a) * r, Math.sin(a) * r]; });
+            objs.push({ type: "rock", pts, x: rand(-1.7, 1.7), y: rand(-1.1, 1.1), z: rand(1.5, 5), size: rand(0.008, 0.03), vz: 0.28, rot: rand(0, TAU), vr: rand(-1, 1), shade: (rand(70, 150) | 0) });
+          }
+        }
+        nebTarget = Math.random() < 0.55 ? 1 : 0.3;
+        const NC = ["150,90,255", "255,95,175", "70,200,255", "90,125,255", "255,150,90"];
+        neb = Array.from({ length: 5 }, () => ({ x: rand(0.05, 0.95), y: rand(0.05, 0.95), r: rand(0.22, 0.48), c: NC[(Math.random() * NC.length) | 0], dx: rand(-0.004, 0.004) }));
+        cometAt = Math.random() < 0.6 ? rand(2, 10) : -1;
+      }
       return {
-        jump() { t = 0; flashed = false; },
+        jump() { v = 0.03; go("stars"); },
+        state: () => ({ phase: st.name, t: +st.t.toFixed(1), v: +v.toFixed(2), objs: objs.map((o) => o.type + "@" + o.z.toFixed(2)), nebA: +nebA.toFixed(2), comet: !!comet }),
+        skip(name) { go(name); },
         draw(dt) {
           const { ctx, W, H, mouse } = E, dark = !E.light;
-          t += dt; v = speedAt(t);
-          const accK = t > IDLE && t < IDLE + ACC ? (t - IDLE) / ACC : 0;
-          if (!flashed && t > IDLE + ACC * 0.94) { flash = 1; flashed = true; }
+          t += dt; step(dt);
+          const accK = st.name === "accel" ? Math.min(1, st.t / ACC) : 0;
           const hyper = Math.min(1, Math.max(0, (v - 0.12) / 2.0));
-          const C1 = E.c1, C2 = E.c2, HEAD1 = mixW(C1, 0.6), HEAD2 = mixW(C2, 0.6);
+          // bleu « vitesse lumière » du film, quel que soit le compte
+          const C1 = dark ? "70,135,255" : "35,85,205", C2 = dark ? "125,185,255" : "55,120,225", HEAD1 = mixW(C1, 0.6), HEAD2 = mixW(C2, 0.6);
           const cols = [C1, C2, mixW(C1, 0.85)], heads = [HEAD1, HEAD2, "255,255,255"];
           // fond
-          if (dark) { ctx.fillStyle = "#010406"; ctx.fillRect(0, 0, W, H); } else ctx.clearRect(0, 0, W, H);
+          if (dark) { ctx.fillStyle = "#01030a"; ctx.fillRect(0, 0, W, H); } else ctx.clearRect(0, 0, W, H);
           // centre (suit un peu la souris) + secousses de caméra
           const tx = mouse.x > -500 ? W / 2 + (mouse.x - W / 2) * 0.1 : W / 2, ty = mouse.y > -500 ? H / 2 + (mouse.y - H / 2) * 0.1 : H / 2;
           c.x += (tx - c.x) * Math.min(1, dt * 1.5); c.y += (ty - c.y) * Math.min(1, dt * 1.5);
@@ -269,6 +362,16 @@
           const F = Math.max(W, H) * 0.42, cr = Math.cos(rot), sr = Math.sin(rot);
           const P = (x, y, z) => { const rx = x * cr - y * sr, ry = x * sr + y * cr; return [cx + (rx / z) * F, cy + (ry / z) * F]; };
           ctx.globalCompositeOperation = dark ? "lighter" : "source-over";
+          // nébuleuse lointaine (pendant la dérive)
+          const inSpace = st.name === "space" || (st.name === "decel" && st.t > DEC * 0.4);
+          nebA += ((inSpace ? nebTarget : 0) - nebA) * Math.min(1, dt * 0.6);
+          if (nebA > 0.01) for (const n of neb) {
+            n.x += n.dx * dt;
+            const R = n.r * Math.max(W, H), x = n.x * W, y = n.y * H;
+            const g = ctx.createRadialGradient(x, y, 0, x, y, R);
+            g.addColorStop(0, rgba(n.c, (dark ? 0.11 : 0.07) * nebA)); g.addColorStop(0.5, rgba(n.c, (dark ? 0.05 : 0.03) * nebA)); g.addColorStop(1, rgba(n.c, 0));
+            ctx.fillStyle = g; ctx.fillRect(x - R, y - R, 2 * R, 2 * R);
+          }
           // nuages de gaz qu'on traverse
           for (const n of clouds) {
             n.z -= v * dt * 0.32;
@@ -283,8 +386,8 @@
           if (hyper > 0.02) {
             const R = F * (0.12 + hyper * 0.3);
             const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-            g.addColorStop(0, rgba(dark ? "255,255,255" : C1, (dark ? 0.55 : 0.18) * hyper));
-            g.addColorStop(0.2, rgba(dark ? HEAD1 : C1, (dark ? 0.32 : 0.12) * hyper));
+            g.addColorStop(0, rgba(dark ? "235,242,255" : C1, (dark ? 0.36 : 0.14) * hyper));
+            g.addColorStop(0.2, rgba(dark ? HEAD1 : C1, (dark ? 0.2 : 0.09) * hyper));
             g.addColorStop(1, rgba(C1, 0));
             ctx.fillStyle = g; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
           }
@@ -297,7 +400,7 @@
             const x = Math.cos(w.th) * w.r * 1.4, y = Math.sin(w.th) * w.r;
             const [hx, hy] = P(x, y, w.z), [qx, qy] = P(x, y, Math.min(1.5, w.z + 0.25 + v * 0.3));
             const g = ctx.createLinearGradient(qx, qy, hx, hy); const col = w.k ? C2 : C1;
-            g.addColorStop(0, rgba(col, 0)); g.addColorStop(1, rgba(col, w.a * hyper * (dark ? 1 : 0.7)));
+            g.addColorStop(0, rgba(col, 0)); g.addColorStop(1, rgba(col, w.a * hyper * (dark ? 0.7 : 0.55)));
             ctx.strokeStyle = g; ctx.lineWidth = w.w * (1.4 - w.z);
             ctx.beginPath(); ctx.moveTo(qx, qy); ctx.lineTo(hx, hy); ctx.stroke();
           }
@@ -308,7 +411,7 @@
             if (s.z <= 0.015) { spawn(s, true); continue; }
             const [hx, hy] = P(s.x, s.y, s.z);
             if (hx < -100 || hx > W + 100 || hy < -100 || hy > H + 100) { spawn(s, true); continue; }
-            const near = Math.max(0, 1 - s.z / 1.35), a = Math.min(1, (0.2 + near * 1.1) * s.b) * Math.min(1, (1.35 - s.z) * 6);
+            const near = Math.max(0, 1 - s.z / 1.35), a = Math.min(1, (0.2 + near * 1.1) * s.b) * Math.min(1, (1.35 - s.z) * 6) * 0.8;
             if (hyper < 0.03) {
               const tw = 0.75 + 0.25 * Math.sin(t * 3 + s.b * 40);
               ctx.fillStyle = rgba(dark ? heads[s.k] : cols[s.k], a * tw);
@@ -323,9 +426,56 @@
             ctx.strokeStyle = g; ctx.lineWidth = s.w * (0.35 + near * near * 3.2);
             ctx.beginPath(); ctx.moveTo(qx, qy); ctx.lineTo(hx, hy); ctx.stroke();
           }
+          // planètes, lunes, astéroïdes (opaques, devant les étoiles lointaines)
+          ctx.globalCompositeOperation = "source-over";
+          if (objs.length) {
+            objs.sort((a, b) => b.z - a.z);
+            for (const o of objs) {
+              o.z -= (o.vz * 0.5 + v * 0.55) * dt;
+              if (o.z < 0.1) { o.dead = true; continue; }
+              const [x, y] = P(o.x, o.y, o.z), sz = (o.size * F) / o.z;
+              const fade = Math.min(1, (4.8 - o.z) / 1.2) * Math.min(1, o.z * 3);
+              if (o.type === "planet") {
+                const d = (o.sp.img.width * sz) / o.sp.R;
+                if (x + d < -100 || x - d > W + 100 || y + d < -100 || y - d > H + 100) { if (o.z < 1) o.dead = true; continue; }
+                ctx.globalAlpha = Math.max(0, fade) * (dark ? 1 : 0.92);
+                ctx.drawImage(o.sp.img, x - d / 2, y - d / 2, d, d);
+              } else {
+                if (x < -60 || x > W + 60 || y < -60 || y > H + 60) { if (o.z < 1) o.dead = true; continue; }
+                o.rot += o.vr * dt;
+                ctx.save(); ctx.translate(x, y); ctx.rotate(o.rot); ctx.scale(sz, sz);
+                ctx.beginPath(); o.pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py))); ctx.closePath();
+                const g = ctx.createLinearGradient(-1, -1, 1, 1);
+                g.addColorStop(0, `rgba(${o.shade + 60},${o.shade + 55},${o.shade + 50},${Math.max(0, fade)})`); g.addColorStop(1, `rgba(${o.shade * 0.25},${o.shade * 0.25},${o.shade * 0.3},${Math.max(0, fade)})`);
+                ctx.fillStyle = g; ctx.fill(); ctx.restore();
+              }
+            }
+            ctx.globalAlpha = 1;
+            objs = objs.filter((o) => !o.dead);
+          }
+          // comète qui traverse l'écran
+          if (st.name === "space" && cometAt > 0 && st.t > cometAt && !comet) {
+            const fromL = Math.random() < 0.5;
+            comet = { x: fromL ? -80 : W + 80, y: rand(0.08, 0.45) * H, vx: (fromL ? 1 : -1) * rand(230, 360), vy: rand(30, 90) };
+            cometAt = -1;
+          }
+          if (comet) {
+            comet.x += comet.vx * dt; comet.y += comet.vy * dt;
+            const sp = Math.hypot(comet.vx, comet.vy), ux = comet.vx / sp, uy = comet.vy / sp, L = 300;
+            ctx.globalCompositeOperation = dark ? "lighter" : "source-over";
+            const g = ctx.createLinearGradient(comet.x, comet.y, comet.x - ux * L, comet.y - uy * L);
+            g.addColorStop(0, dark ? "rgba(210,235,255,.75)" : "rgba(40,90,200,.6)"); g.addColorStop(1, "rgba(120,180,255,0)");
+            ctx.strokeStyle = g; ctx.lineWidth = 5; ctx.lineCap = "round";
+            ctx.beginPath(); ctx.moveTo(comet.x, comet.y); ctx.lineTo(comet.x - ux * L, comet.y - uy * L); ctx.stroke();
+            const hg = ctx.createRadialGradient(comet.x, comet.y, 0, comet.x, comet.y, 16);
+            hg.addColorStop(0, dark ? "rgba(255,255,255,.95)" : "rgba(30,70,180,.9)"); hg.addColorStop(1, "rgba(150,200,255,0)");
+            ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(comet.x, comet.y, 16, 0, TAU); ctx.fill();
+            if (comet.x < -400 || comet.x > W + 400 || comet.y > H + 200) comet = null;
+          }
+          ctx.globalCompositeOperation = dark ? "lighter" : "source-over";
           // reflet horizontal de caméra (flare anamorphique)
           if (hyper > 0.05 && dark) {
-            const g = ctx.createLinearGradient(0, 0, W, 0), al = hyper * (0.22 + Math.sin(t * 2.1) * 0.05);
+            const g = ctx.createLinearGradient(0, 0, W, 0), al = hyper * (0.14 + Math.sin(t * 2.1) * 0.03);
             g.addColorStop(0, rgba(C1, 0)); g.addColorStop(0.5, rgba(HEAD1, al)); g.addColorStop(1, rgba(C1, 0));
             ctx.fillStyle = g; ctx.fillRect(0, cy - 1.2, W, 2.4);
             ctx.fillStyle = rgba(C1, al * 0.25); ctx.fillRect(0, cy - 10, W, 20);
@@ -335,12 +485,12 @@
           if (dark && hyper > 0.02) {
             sctx.clearRect(0, 0, small.width, small.height);
             sctx.drawImage(ctx.canvas, 0, 0, small.width, small.height);
-            ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.55 * hyper;
+            ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.3 * hyper;
             ctx.drawImage(small, 0, 0, W, H);
             ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
           }
           if (flash > 0) {
-            ctx.fillStyle = rgba(dark ? HEAD1 : "255,255,255", flash * (dark ? 0.8 : 0.85));
+            ctx.fillStyle = rgba(dark ? HEAD1 : "255,255,255", flash * (dark ? 0.5 : 0.6));
             ctx.fillRect(0, 0, W, H);
             flash = Math.max(0, flash - dt * 2.0);
           }
@@ -573,6 +723,8 @@
       set(m) { if (!MODES[m]) return; mode = m; try { localStorage.setItem(KEY, JSON.stringify(m)); } catch {} build(); L.sync(); },
       get: () => mode,
       jump() { inst?.jump?.(); L.sync(); },
+      debug: () => inst?.state?.(),
+      skip: (n) => inst?.skip?.(n),
     };
   }
 
