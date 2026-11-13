@@ -1422,6 +1422,7 @@ const ACTIONS = [
   { t: "Dupliquer le writeup", i: "dup", need: true, run: () => duplicateCurrent() },
   { t: "Télécharger une sauvegarde", i: "download", run: () => backup() },
   { t: "Importer une sauvegarde (.json)", i: "upload", run: () => $("#importFile").click() },
+  { t: "Changer le fond de l'accueil", i: "image", run: () => showBgPicker() },
   { t: "Raccourcis clavier", i: "help", run: () => showHelp() },
   { t: "Se déconnecter / changer de compte", i: "logout", cloud: true, run: () => logout() },
 ];
@@ -1512,6 +1513,23 @@ function confirmModal({ title, text, ok = "OK", danger = false }) {
   });
 }
 
+/* Choix du fond de l'accueil : appliqué en direct derrière la fenêtre, mémorisé dans ce navigateur */
+async function showBgPicker() {
+  if (state.current) await showHome();
+  const FX = window.CW_FX;
+  if (!FX?.home) return toast("Les animations sont désactivées sur cet appareil");
+  const cur = FX.home.get();
+  const ov = makeOverlay(`<div class="modal bgpick"><h3>Fond de l'accueil</h3><p>Clique pour essayer : le fond change en direct. Ton choix est gardé sur cet appareil.</p>
+    <div class="bg-grid">${Object.entries(FX.MODES).map(([id, m], i) => `<button class="bg-opt ${id === cur ? "on" : ""}" data-m="${id}"><span class="n">${String(i + 1).padStart(2, "0")}</span><b>${esc(m.name)}</b><span class="d">${esc(m.desc)}</span></button>`).join("")}</div>
+    <div class="acts"><button class="btn-primary" data-close>Garder ce fond</button></div></div>`);
+  ov.classList.add("clear");
+  ov.addEventListener("click", (e) => {
+    const b = e.target.closest(".bg-opt");
+    if (b) { FX.home.set(b.dataset.m); $$(".bg-opt", ov).forEach((x) => x.classList.toggle("on", x === b)); return; }
+    if (e.target === ov || e.target.closest("[data-close]")) closeOverlay();
+  });
+}
+
 function showHelp() {
   const rows = [
     ["Ctrl K", "Palette : writeups, commandes, actions"], ["/", "Filtrer la liste des writeups"],
@@ -1584,6 +1602,7 @@ function bind() {
   $("#paletteBtn").onclick = () => openPalette();
   $("#helpBtn").onclick = () => showHelp();
   $("#themeBtn").onclick = () => setTheme();
+  $("#bgBtn").onclick = () => showBgPicker();
   $("#logoutBtn").onclick = () => logout();
   $("#scrim").onclick = () => $("#sidebar").classList.remove("open");
   $("#backupBtn").onclick = (e) => { e.preventDefault(); backup(); };
