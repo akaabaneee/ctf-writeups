@@ -1,7 +1,7 @@
 # CTF Writeups
 
 Site local pour rédiger et archiver tes writeups de CTF / challenges : éditeur type Word,
-cheatsheet de commandes, encodeur/décodeur, palette de commandes, thème terminal.
+cheatsheet de commandes, encodeur/décodeur, palette de commandes, thème clair ou sombre (bouton ☀/☾ en bas à gauche).
 
 ## Installation
     git clone https://github.com/akaabaneee/ctf-writeups.git
@@ -17,7 +17,7 @@ tes writeups restent sur ta machine dans `data/` (ignoré par git).
 
 ## Mettre en ligne sur Vercel (writeups enregistrés pour toujours)
 1. Importe le repo sur Vercel (Framework : *Other*, rien d'autre à régler — `vercel.json` s'occupe du reste).
-2. **Storage → Create Database → Blob** → crée-le et **connecte-le** au projet (ajoute `BLOB_READ_WRITE_TOKEN`).
+2. **Storage → Create Database → Blob** → crée-le et **connecte-le** au projet (Vercel ajoute `BLOB_STORE_ID`, ou `BLOB_READ_WRITE_TOKEN` sur les anciens stores).
 3. **Settings → Environment Variables** → `CW_PASSWORD` = ton mot de passe (long et unique).
 4. **Redeploy**.
 
@@ -30,7 +30,7 @@ il passe en mode navigateur (IndexedDB) et propose ensuite de transférer ces wr
 - `data/writeups/*.json` : un fichier par writeup (métadonnées + contenu HTML)
 - `data/images/`         : les images collées / glissées
 - `data/corbeille/`      : writeups supprimés (récupérables : remets le fichier dans `data/writeups/` en retirant le suffixe `-<timestamp>`)
-- Bouton « Sauvegarde » : télécharge un .zip de tout.
+- Bouton ↓ (en bas à gauche) : télécharge une sauvegarde `.json` complète (images incluses), réimportable avec le bouton ↑.
 
 ## Fonctions
 - Éditeur type Word (TinyMCE) : images collées/redimensionnables, code coloré, blocs terminal / flag / encadrés, modèle de writeup

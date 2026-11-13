@@ -175,7 +175,6 @@ class Handler(BaseHTTPRequestHandler):
                 doc = {k: body.get(k, "") for k in META_KEYS}
                 doc.update(id=secrets.token_hex(6), content=body.get("content", ""),
                            created=now_ms(), updated=now_ms())
-                doc["title"] = doc["title"] or "Sans titre"
                 doc["tags"] = body.get("tags") or []
                 save(doc)
                 return self.send_json(doc, 201)

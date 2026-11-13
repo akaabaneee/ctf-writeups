@@ -31,6 +31,10 @@ const pref = {
   set(k, v) { try { localStorage.setItem("cw." + k, JSON.stringify(v)); } catch {} },
 };
 
+/* Thème du site (clair / sombre) et thème de la page du writeup (auto = suit le site) */
+const appTheme = () => (document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+const pageTheme = () => { const t = pref.get("pageTheme2", "auto"); return t === "light" || t === "dark" ? t : appTheme(); };
+
 const state = {
   list: [], current: null, dirty: false, saving: null, timer: null, loading: false, editorReady: null,
   catFilter: pref.get("catFilter", ""), closedGroups: new Set(pref.get("closedGroups", [])),
@@ -187,7 +191,7 @@ function showSetup(h = {}) {
   const ov = document.createElement("div");
   ov.className = "overlay lock";
   ov.innerHTML = `
-    <div class="modal" style="width:min(560px,94vw)">
+    <div class="modal wide">
       <h3>⚙ Dernière étape : configurer le stockage</h3>
       <p>Le site est en ligne, mais il faut lui donner un endroit où enregistrer tes writeups pour toujours. Sur <b>vercel.com</b>, dans ton projet :</p>
       ${miss ? `<p class="login-err">Variable(s) introuvable(s) dans le déploiement actuel${h.env ? ` (<b>${h.env}</b>)` : ""} : ${miss}</p>` : ""}
@@ -259,15 +263,18 @@ async function uploadDataImages(html) {
 
 /* ---- Sauvegarde / import (les deux modes) ---- */
 async function backup() {
-  if (state.mode === "server") { location.href = "/api/export"; return; }
   await flush();
   let writeups;
-  if (state.mode === "cloud") {
-    toast("Préparation de la sauvegarde…");
-    writeups = [];
-    for (const w of state.list) { const d = await api.get(w.id); d.content = await inlineImages(d.content); writeups.push(d); }
-  } else writeups = await idb.all("writeups");
-  const cheatsheet = state.mode === "cloud" ? state.custom : await localApi.cheat();
+  try {
+    if (state.mode === "local") writeups = await idb.all("writeups");
+    else {
+      // serveur local ou cloud : on récupère chaque writeup et on intègre ses images dans le fichier
+      toast("Préparation de la sauvegarde…");
+      writeups = [];
+      for (const w of state.list) { const d = await api.get(w.id); d.content = await inlineImages(d.content); writeups.push(d); }
+    }
+  } catch (e) { return toast("⚠ Sauvegarde impossible : " + e.message); }
+  const cheatsheet = state.mode === "local" ? await localApi.cheat() : state.custom;
   const data = { app: "ctf-writeups", version: 1, exported: new Date().toISOString(), writeups, cheatsheet };
   download(`writeups-backup-${today()}.json`, JSON.stringify(data), "application/json");
   pref.set("lastBackup", Date.now());
@@ -282,9 +289,13 @@ async function importBackup(file) {
   const ok = await confirmModal({ title: "Importer la sauvegarde ?", text: `${ws.length} writeup(s) vont être ajoutés${state.mode === "local" ? " (ceux qui existent déjà avec le même identifiant seront remplacés)" : ""}.`, ok: "Importer" });
   if (!ok) return;
   await flush();
+  let done = 0;
   for (const w of ws) {
-    if (state.mode === "local") await localApi.create(w);
-    else { const { id, created, updated, text, ...rest } = w; rest.content = await uploadDataImages(rest.content); await api.create(rest); }
+    try {
+      if (state.mode === "local") await localApi.create(w);
+      else { const { id, created, updated, text, ...rest } = w; rest.content = await uploadDataImages(rest.content); await api.create(rest); }
+      done++;
+    } catch (e) { toast("⚠ " + (w?.title || "Sans titre") + " : " + e.message); }
   }
   if (Array.isArray(data.cheatsheet) && data.cheatsheet.length) {
     const known = new Set(state.custom.map((c) => c.id));
@@ -293,15 +304,17 @@ async function importBackup(file) {
   }
   state.list = await api.list();
   renderAll();
-  toast(`✔ ${ws.length} writeup(s) importé(s)`);
+  toast(`✔ ${done} writeup${done > 1 ? "s" : ""} importé${done > 1 ? "s" : ""}`);
 }
 
 function toast(msg) {
   const t = $("#toast");
+  const warn = String(msg).startsWith("⚠");
   t.textContent = msg;
+  t.classList.toggle("warn", warn);
   t.classList.add("show");
   clearTimeout(t._h);
-  t._h = setTimeout(() => t.classList.remove("show"), 2200);
+  t._h = setTimeout(() => t.classList.remove("show"), warn ? 5000 : 2200);
 }
 async function copyText(text, msg = "Copié dans le presse-papiers") {
   try { await navigator.clipboard.writeText(text); }
@@ -339,17 +352,17 @@ r.interactive()</code></pre>
 
 const CONTENT_CSS = `
 :root{--pw:820px;--acc:#00e59b;--cy:#22d3ee}
-html{background:#e7ebef;transition:background .2s}
+html{background:transparent}
 body{max-width:var(--pw);margin:30px auto 70px;padding:58px 70px;background:#fff;color:#1d232b;
- min-height:calc(100vh - 100px);box-shadow:0 1px 3px rgba(0,0,0,.08),0 12px 40px rgba(0,0,0,.08);border-radius:8px;
- font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15.5px;line-height:1.75;word-wrap:break-word;
+ min-height:calc(100vh - 100px);box-shadow:0 0 0 1px rgba(15,23,42,.07),0 2px 6px rgba(15,23,42,.04),0 18px 50px rgba(15,23,42,.1);border-radius:10px;
+ font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.75;word-wrap:break-word;
  transition:max-width .2s ease}
+@media (max-width:700px){body{margin:12px 8px 40px;padding:28px 20px}}
 html.full body{max-width:none;margin:0;border-radius:0;box-shadow:none;min-height:100vh;padding:44px 6vw}
-html.dark{background:#06080b}
-html.dark body{background:#0c1117;color:#d5dde6;box-shadow:0 0 0 1px #19222c,0 20px 60px rgba(0,0,0,.6)}
+html.dark body{background:#0c1117;color:#d5dde6;box-shadow:0 0 0 1px rgba(148,170,196,.14),0 20px 60px rgba(0,0,0,.55)}
 html.dark.full body{box-shadow:none;background:#0a0e13}
 h1,h2,h3,h4{line-height:1.3;margin:1.7em 0 .6em;letter-spacing:-.3px;font-weight:750}
-h1{font-size:2em} h2{font-size:1.45em} h3{font-size:1.17em} h4{font-size:1em}
+h1{font-size:32px} h2{font-size:24px} h3{font-size:19px} h4{font-size:16px}
 h2::before{content:"#";font-family:"JetBrains Mono",monospace;color:#059669;margin-right:.45em;font-weight:600;opacity:.8}
 h3::before{content:"##";font-family:"JetBrains Mono",monospace;color:#0891b2;margin-right:.45em;font-weight:600;opacity:.7;font-size:.85em}
 html.dark h1,html.dark h2,html.dark h3{color:#f1f5f9}
@@ -368,15 +381,18 @@ html.dark code{background:#141c25;color:#7ee7c4;border:1px solid #1d2834}
 pre{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px;line-height:1.6;background:#0a0f14 !important;color:#d6e2ee;
  padding:15px 18px;border-radius:10px;overflow:auto;white-space:pre;border:1px solid #1b2530;tab-size:4;margin:1.1em 0}
 pre code{background:none !important;border:0 !important;padding:0;font-size:inherit;color:inherit}
+pre[class*=language-],pre[class*=language-] code,code[class*=language-]{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px;line-height:1.6;text-shadow:none;color:#d6e2ee;white-space:pre}
+pre[class*=language-]{padding:15px 18px;margin:1.1em 0}
+pre .token{background:none !important;text-shadow:none}
 pre.terminal{background:#030507 !important;color:#7ff5c8;border-color:#13261f;position:relative;padding-top:36px;
  box-shadow:inset 0 0 40px rgba(0,229,155,.04)}
 pre.terminal::before{content:"";position:absolute;top:12px;left:14px;width:9px;height:9px;border-radius:50%;background:#ff5f57;box-shadow:15px 0 #febc2e,30px 0 #28c840}
 pre.terminal::after{content:"terminal";position:absolute;top:7px;right:12px;font-size:10px;color:#3c5a4d;letter-spacing:1px;text-transform:uppercase}
-.token.comment,.token.prolog,.token.doctype,.token.cdata{color:#6b7f92;font-style:italic}
-.token.punctuation{color:#b5c3d1}.token.property,.token.tag,.token.constant,.token.symbol,.token.deleted{color:#7ee787}
-.token.boolean,.token.number{color:#79c0ff}.token.selector,.token.attr-name,.token.string,.token.char,.token.builtin,.token.inserted{color:#a5f3d0}
-.token.operator,.token.entity,.token.url{color:#ff8b9b}.token.atrule,.token.attr-value,.token.keyword{color:#ff7b9c}
-.token.function,.token.class-name{color:#d2a8ff}.token.regex,.token.important,.token.variable{color:#ffb86b}
+pre .token.comment,pre .token.prolog,pre .token.doctype,pre .token.cdata{color:#6b7f92;font-style:italic}
+pre .token.punctuation{color:#b5c3d1}pre .token.property,pre .token.tag,pre .token.constant,pre .token.symbol,pre .token.deleted{color:#7ee787}
+pre .token.boolean,pre .token.number{color:#79c0ff}pre .token.selector,pre .token.attr-name,pre .token.string,pre .token.char,pre .token.builtin,pre .token.inserted{color:#a5f3d0}
+pre .token.operator,pre .token.entity,pre .token.url{color:#ff8b9b}pre .token.atrule,pre .token.attr-value,pre .token.keyword{color:#ff7b9c}
+pre .token.function,pre .token.class-name{color:#d2a8ff}pre .token.regex,pre .token.important,pre .token.variable{color:#ffb86b}
 .flag-box{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:14px;letter-spacing:.2px;background:linear-gradient(135deg,rgba(0,229,155,.13),rgba(34,211,238,.05));
  border:1px solid rgba(0,185,125,.5);color:#047857;padding:13px 16px 13px 46px;border-radius:10px;margin:1.1em 0;position:relative;font-weight:600}
 .flag-box::before{content:"🚩";position:absolute;left:15px;top:50%;transform:translateY(-50%)}
@@ -400,7 +416,7 @@ html.dark li::marker{color:var(--acc)}
 details{border:1px solid #d0d7de;border-radius:10px;padding:8px 14px;margin:1em 0} html.dark details{border-color:#1f2a36;background:#0a0f14}
 summary{cursor:pointer;font-weight:650}
 ::selection{background:rgba(0,229,155,.3)}
-@media print{html,html.dark{background:#fff}body,html.dark body{box-shadow:none;margin:0;max-width:none;padding:0;background:#fff;color:#1d232b;min-height:0}
+@media print{html,html.dark{background:#fff !important}body,html.dark body{box-shadow:none;margin:0;max-width:none;padding:0;background:#fff;color:#1d232b;min-height:0}
  html.dark h1,html.dark h2,html.dark h3,html.dark strong{color:#111} .mce-pagebreak,.pagebreak{page-break-before:always;border:0} pre{white-space:pre-wrap;page-break-inside:avoid}}
 `;
 
@@ -413,7 +429,7 @@ function initEditor() {
       selector: "#editor",
       license_key: "gpl",
       language: "fr_FR",
-      skin: "oxide-dark",
+      skin: appTheme() === "dark" ? "oxide-dark" : "oxide",
       content_css: ["/vendor/fonts/fonts.css"],
       content_style: CONTENT_CSS,
       height: "100%",
@@ -500,7 +516,16 @@ function initEditor() {
         ed.ui.registry.addMenuItem("wprint", { icon: "print", text: "Imprimer / PDF", onAction: () => printDoc() });
 
         ed.on("keydown", (e) => globalKeys(e, true));
-        ed.on("input change undo redo ExecCommand SetAttrib ObjectResized", () => { if (!state.loading) { markDirty(); refreshDocInfo(); } });
+        ed.on("input change undo redo ExecCommand SetAttrib ObjectResized", (ev) => {
+          if (state.loading) return;
+          // Pendant une sauvegarde, l'éditeur retouche lui-même les images (src, attributs internes) : ce n'est
+          // pas une modification de l'utilisateur. Sans ce filtre, tout writeup contenant une image se
+          // ré-enregistrait en boucle. La frappe (« input ») reste toujours prise en compte, et saveNow()
+          // compare le contenu en fin de sauvegarde pour ne rien rater.
+          if (state.uploading && /^(change|setattrib|execcommand)$/i.test(ev.type)) return;
+          if (state.saving && /^setattrib$/i.test(ev.type)) return;
+          markDirty(); refreshDocInfo();
+        });
         ed.on("init", () => { applyPage(); resolve(ed); });
         ed.on("ResizeEditor ToggleToolbarDrawer", () => positionHandlesSoon());
       },
@@ -510,15 +535,41 @@ function initEditor() {
 
 async function uploadImage(blobInfo, progress) {
   const blob = blobInfo.blob();
-  if (state.mode === "local") { progress(100); markDirty(); return `data:${blob.type || "image/png"};base64,${blobInfo.base64()}`; }
+  // Pas de markDirty() ici : saveNow() attend déjà la fin des envois, et en mode navigateur
+  // l'image reste en data: — la marquer « modifiée » à chaque passage relançait la sauvegarde en boucle.
+  if (state.mode === "local") { progress(100); return `data:${blob.type || "image/png"};base64,${blobInfo.base64()}`; }
   const r = await fetch("/api/upload", { method: "POST", headers: { "Content-Type": blob.type || "image/png" }, body: blob });
   const j = await r.json();
   if (!r.ok) throw { message: j.error || "Échec de l'envoi", remove: true };
   progress(100);
-  markDirty();
   return j.location;
 }
 const ed = () => tinymce.get("editor");
+
+/* Recrée l'éditeur (nécessaire pour changer son habillage clair/sombre) sans perdre le contenu */
+async function rebuildEditor() {
+  const old = ed();
+  if (!old) return;
+  await flush();
+  const content = state.current ? old.getContent() : "";
+  state.loading = true;
+  old.remove();
+  initEditor();
+  const e = await state.editorReady;
+  if (state.current) { e.setContent(content); e.undoManager.clear(); e.undoManager.add(); }
+  state.loading = false;
+  applyPage();
+  refreshDocInfo();
+}
+
+async function setTheme(t) {
+  if (t !== "dark" && t !== "light") t = appTheme() === "dark" ? "light" : "dark";
+  if (t === appTheme()) return;
+  pref.set("theme", t);
+  document.documentElement.dataset.theme = t;
+  await rebuildEditor();
+  applyPage();
+}
 
 /* =====================================================================
    Page : largeur & thème
@@ -530,15 +581,17 @@ function currentWidth() {
 function applyPage() {
   const e = ed();
   const w = currentWidth();
-  const theme = pref.get("pageTheme", "dark");
+  const theme = pageTheme(), choice = pref.get("pageTheme2", "auto");
   if (e && e.getDoc()) {
     const root = e.getDoc().documentElement;
     root.classList.toggle("full", w === 0);
     root.classList.toggle("dark", theme === "dark");
+    // même schéma de couleurs que le site, sinon le navigateur rend l'iframe opaque (plus de fond visible)
+    root.style.colorScheme = appTheme();
     if (w) root.style.setProperty("--pw", w + "px");
   }
   $$("#widthSeg button").forEach((b) => b.classList.toggle("on", Number(b.dataset.w) === w));
-  $$("#themeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.t === theme));
+  $$("#themeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.t === choice));
   $("#widthRange").value = w || 1600;
   $("#widthLabel").textContent = w ? w + " px" : "100 %";
   positionHandlesSoon();
@@ -602,8 +655,8 @@ function setWidth(w) {
   if (state.current) { state.current.pageWidth = w; markDirty(); }
   applyPage();
 }
-function toggleTheme() {
-  pref.set("pageTheme", pref.get("pageTheme", "dark") === "dark" ? "light" : "dark");
+function setPageTheme(t) {
+  pref.set("pageTheme2", t);
   applyPage();
 }
 
@@ -643,7 +696,7 @@ function renderList() {
     <button class="item ${state.current?.id === w.id ? "active" : ""}" data-id="${w.id}">
       <span class="t"><span>${esc(w.title || "Sans titre")}</span>${w.pinned ? '<span class="star">★</span>' : ""}</span>
       <span class="s"><span class="st" style="background:${STATUS[w.status]?.color || "#475569"}" title="${STATUS[w.status]?.label || ""}"></span>
-        <span class="cat-tag" style="color:${catColor(w.category)}">${esc(groupBy === "category" ? w.ctf || "—" : w.category || "—")}</span>
+        <span class="cat-tag" style="--c:${catColor(w.category)}">${esc(groupBy === "category" ? w.ctf || "—" : w.category || "—")}</span>
         ${w.points ? `<span>${esc(w.points)}pts</span>` : ""}</span>
     </button>`;
   if (groupBy === "none") { $("#list").innerHTML = items.map(row).join(""); return; }
@@ -655,7 +708,7 @@ function renderList() {
   });
   $("#list").innerHTML = [...groups].sort((a, b) => a[0].localeCompare(b[0], "fr")).map(([k, ws]) => `
     <div class="group ${state.closedGroups.has(k) ? "closed" : ""}" data-g="${esc(k)}">
-      <button class="group-title">${icon("chev")}${esc(k)}<span class="n">${ws.length}</span></button>
+      <button class="group-title">${icon("chev")}<span class="gn">${esc(k)}</span><span class="n">${ws.length}</span></button>
       <div class="group-items">${ws.map(row).join("")}</div>
     </div>`).join("");
 }
@@ -691,12 +744,12 @@ function card(w) {
   const c = catColor(w.category);
   return `
     <button class="card" data-id="${w.id}" style="--c:${c}">
-      <div class="row"><span class="badge" style="color:${c}">${esc(w.category || "—")}</span>
+      <div class="row"><span class="badge">${esc(w.category || "—")}</span>
         <span class="cm"><span class="st" style="background:${STATUS[w.status]?.color || "#475569"}"></span>${STATUS[w.status]?.label || ""}${w.pinned ? ' <span style="color:var(--warn)">★</span>' : ""}</span></div>
       <div class="ct">${esc(w.title || "Sans titre")}</div>
       <div class="cm">${esc(w.ctf || "—")}${w.points ? " · " + esc(w.points) + " pts" : ""}${w.difficulty ? " · " + esc(w.difficulty.toLowerCase()) : ""}</div>
       ${(w.tags || []).length ? `<div class="cm">${w.tags.slice(0, 5).map((t) => `<span class="tag">#${esc(t)}</span>`).join("")}</div>` : ""}
-      <div class="cm" style="font-size:10.5px;opacity:.75">modifié ${relTime(w.updated)}</div>
+      <div class="cm when">modifié ${relTime(w.updated)}</div>
     </button>`;
 }
 
@@ -714,11 +767,11 @@ function renderDashboard() {
   const thisMonth = L.filter((w) => (w.date || "").startsWith(month)).length;
   const pct = Math.round((solved / L.length) * 100);
   $("#stats").innerHTML = `
-    <div class="panel corners stat"><div class="v">${L.length}</div><div class="l">writeups</div></div>
-    <div class="panel corners stat"><div class="v accent">${solved}</div><div class="l">flags · ${pct}% résolus</div><div class="bar"><span style="width:${pct}%"></span></div></div>
-    <div class="panel corners stat"><div class="v">${pts.toLocaleString("fr-FR")}</div><div class="l">points cumulés</div></div>
-    <div class="panel corners stat"><div class="v">${ctfs}</div><div class="l">ctf / plateformes</div></div>
-    <div class="panel corners stat"><div class="v">${thisMonth}</div><div class="l">ce mois-ci</div></div>`;
+    <div class="panel stat"><span class="si">${icon("file")}</span><div class="v">${L.length}</div><div class="l">writeup${L.length > 1 ? "s" : ""}</div></div>
+    <div class="panel stat hl"><span class="si">${icon("flag")}</span><div class="v accent">${solved}</div><div class="l">flag${solved > 1 ? "s" : ""} · ${pct}% résolus</div><div class="bar"><span style="width:${pct}%"></span></div></div>
+    <div class="panel stat"><span class="si">${icon("trophy")}</span><div class="v">${pts.toLocaleString("fr-FR")}</div><div class="l">points cumulés</div></div>
+    <div class="panel stat"><span class="si">${icon("globe")}</span><div class="v">${ctfs}</div><div class="l">ctf / plateformes</div></div>
+    <div class="panel stat"><span class="si">${icon("cal")}</span><div class="v">${thisMonth}</div><div class="l">ce mois-ci</div></div>`;
 
   // Heatmap : 26 semaines, colonnes = semaines (lundi → dimanche)
   const byDay = {};
@@ -741,7 +794,7 @@ function renderDashboard() {
   const max = cats[0]?.[1] || 1;
   $("#catbars").innerHTML = cats.map(([c, n]) => `
     <button class="catbar" data-cat="${esc(c)}" title="Filtrer : ${esc(c)}"><span>${esc(c.toLowerCase())}</span>
-      <span class="track"><span style="width:${(n / max) * 100}%;background:${catColor(c)};box-shadow:0 0 10px ${catColor(c)}66"></span></span><b>${n}</b></button>`).join("");
+      <span class="track"><span style="width:${(n / max) * 100}%;--c:${catColor(c)}"></span></span><b>${n}</b></button>`).join("");
 
   const tags = {};
   L.forEach((w) => (w.tags || []).forEach((t) => (tags[t] = (tags[t] || 0) + 1)));
@@ -821,6 +874,7 @@ async function openWriteup(id, { push = true } = {}) {
   updateCrumbs();
   $("#dashboard").hidden = true;
   $("#editorView").hidden = false;
+  document.body.classList.add("editing");
   const e = await state.editorReady;
   state.loading = true;
   e.setContent(doc.content || "");
@@ -883,7 +937,8 @@ async function saveNow() {
     state.dirty = false;
     setSaveState("saving");
     try {
-      await e.uploadImages();
+      state.uploading = true;
+      try { await e.uploadImages(); } finally { state.uploading = false; }
       const c = collect();
       // Remplit le champ flag automatiquement depuis le bloc flag du writeup
       if (!c.flag) {
@@ -897,6 +952,7 @@ async function saveNow() {
       const i = state.list.findIndex((w) => w.id === c.id);
       if (i >= 0) state.list.splice(i, 1);
       state.list.unshift({ ...meta, text: e.getContent({ format: "text" }) });
+      if (!state.dirty && state.current === c && e.getContent() !== body.content) markDirty(); // modifié pendant l'envoi
       if (!state.dirty) setSaveState("saved");
       document.title = (c.title || "Sans titre") + " · ctf://writeups";
       renderCats(); renderList(); renderDatalist();
@@ -918,6 +974,7 @@ async function showHome({ push = true } = {}) {
   state.current = null;
   $("#editorView").hidden = true;
   $("#dashboard").hidden = false;
+  document.body.classList.remove("editing");
   document.title = "ctf://writeups";
   if (push) history.pushState(null, "", "#/");
   renderList(); renderDashboard();
@@ -928,14 +985,14 @@ async function showHome({ push = true } = {}) {
 async function deleteCurrent() {
   const c = state.current;
   if (!c) return;
-  const ok = await confirmModal({ title: "Supprimer ce writeup ?", text: `« ${c.title || "Sans titre"} » sera déplacé dans data/corbeille/ (récupérable).`, ok: "Supprimer", danger: true });
+  const ok = await confirmModal({ title: "Supprimer ce writeup ?", text: `« ${c.title || "Sans titre"} » ${{ server: "sera déplacé dans data/corbeille/ (récupérable).", cloud: "sera déplacé dans le dossier trash/ de ton stockage (récupérable)." }[state.mode] || "sera retiré de ce navigateur. Pense à faire un backup avant si tu veux le garder."}`, ok: "Supprimer", danger: true });
   if (!ok) return;
   clearTimeout(state.timer); state.dirty = false;
   await api.remove(c.id);
   state.list = state.list.filter((w) => w.id !== c.id);
   state.current = null;
   renderAll(); showHome();
-  toast("Writeup supprimé → data/corbeille");
+  toast({ server: "Writeup supprimé → data/corbeille", cloud: "Writeup supprimé → trash/" }[state.mode] || "Writeup supprimé");
 }
 
 async function duplicateCurrent() {
@@ -976,9 +1033,10 @@ async function fontCSS() {
 function buildDocHTML(content, { forPrint = false, fonts = "" } = {}) {
   const c = collect();
   const metaBits = [c.ctf, c.category, c.difficulty, c.points && c.points + " pts", c.date && new Date(c.date).toLocaleDateString("fr-FR")].filter(Boolean);
-  const theme = forPrint ? "" : pref.get("pageTheme", "dark");
+  const theme = forPrint ? "" : pageTheme();
   return `<!doctype html><html lang="fr" class="${theme === "dark" ? "dark" : ""}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(c.title || "Writeup")}</title><style>${fonts}${CONTENT_CSS}
+html{background:#eef1f5}html.dark{background:#06080b}
 .wh{margin-bottom:2.2em;padding-bottom:1.4em;border-bottom:1px solid rgba(127,127,127,.25)}.wh .k{font:12px "JetBrains Mono",monospace;color:#00b97d;margin-bottom:.4em}
 .wh h1{margin:0 0 .35em;font-size:2.2em;letter-spacing:-.8px}.wh h1::before{content:none}.wh .m{color:#6b7785;font-size:.9em;font-family:"JetBrains Mono",monospace}.wh .t{margin-top:.7em}
 .wh .t span{display:inline-block;font:.78em "JetBrains Mono",monospace;padding:.15em .6em;margin:0 .35em .35em 0;border-radius:6px;background:rgba(0,229,155,.1);color:#00b97d;border:1px solid rgba(0,229,155,.3)}</style></head>
@@ -1161,7 +1219,7 @@ function renderCheat() {
     <div class="cmd" data-i="${i}">
       <div class="cmd-head">
         <span class="tt">${esc(c.title)}</span>
-        <span class="badge" style="color:${window.CHEAT_CATS[c.cat] || "#94a3b8"}">${esc(c.custom ? "★ " + c.cat : c.cat)}</span>
+        <span class="badge" style="--c:${window.CHEAT_CATS[c.cat] || "#94a3b8"}">${esc(c.custom ? "★ " + c.cat : c.cat)}</span>
         <span class="cmd-acts">
           <button class="icon-btn sm" data-a="copy" title="Copier">${icon("copy")}</button>
           ${canInsert ? `<button class="icon-btn sm" data-a="insert" title="Insérer dans le writeup">${icon("insert")}</button>` : ""}
@@ -1230,14 +1288,14 @@ const ACTIONS = [
   { t: "Ouvrir l'encodeur / décodeur", i: "code", k: "Ctrl Maj E", run: () => openDrawer("tools") },
   { t: "Sommaire du writeup", i: "list", run: () => openDrawer("toc") },
   { t: "Mode focus", i: "focus", k: "Ctrl Maj F", run: () => toggleFocus() },
-  { t: "Basculer page claire / sombre", i: "sliders", run: () => toggleTheme() },
+  { t: "Thème clair / sombre", i: "sun", run: () => setTheme() },
   { t: "Mettre en favori / retirer", i: "star", need: true, run: () => togglePin() },
   { t: "Exporter en HTML", i: "file", need: true, run: () => exportHTML() },
   { t: "Exporter en Markdown", i: "file", need: true, run: () => exportMD() },
   { t: "Imprimer / PDF", i: "print", k: "Ctrl P", need: true, run: () => printDoc() },
   { t: "Dupliquer le writeup", i: "dup", need: true, run: () => duplicateCurrent() },
-  { t: "Télécharger une sauvegarde", i: "zip", run: () => backup() },
-  { t: "Importer une sauvegarde (.json)", i: "insert", run: () => $("#importFile").click() },
+  { t: "Télécharger une sauvegarde", i: "download", run: () => backup() },
+  { t: "Importer une sauvegarde (.json)", i: "upload", run: () => $("#importFile").click() },
   { t: "Raccourcis clavier", i: "help", run: () => showHelp() },
   { t: "Se déconnecter", i: "x", cloud: true, run: () => logout() },
 ];
@@ -1337,7 +1395,7 @@ function showHelp() {
     ["Ctrl E", "Code en ligne (dans l'éditeur)"], ["Ctrl V", "Coller une capture d'écran"],
     ["Échap", "Fermer palette / panneau / mode focus"],
   ];
-  const ov = makeOverlay(`<div class="modal" style="width:min(520px,92vw)"><h3>Raccourcis clavier</h3><p>Ils fonctionnent aussi pendant que tu écris dans l'éditeur.</p>
+  const ov = makeOverlay(`<div class="modal wide"><h3>Raccourcis clavier</h3><p>Ils fonctionnent aussi pendant que tu écris dans l'éditeur.</p>
     <div class="help-grid">${rows.map(([k, d]) => `<kbd>${k}</kbd><span>${d}</span>`).join("")}</div>
     <div class="acts"><button class="btn-primary" data-close>OK</button></div></div>`);
   ov.addEventListener("click", (e) => { if (e.target === ov || e.target.closest("[data-close]")) closeOverlay(); });
@@ -1380,6 +1438,8 @@ function globalKeys(e, fromEditor = false) {
   if (e.key === "/" && !typing && !$("#overlay")) { stop(); $("#search").focus(); return; }
   if (e.key === "Escape") {
     if ($("#overlay")) return closeOverlay();
+    if (!$("#moreMenu").hidden || !$("#pageMenu").hidden) { $("#moreMenu").hidden = true; $("#pageMenu").hidden = true; return; }
+    if ($("#sidebar").classList.contains("open")) return $("#sidebar").classList.remove("open");
     if (document.activeElement === $("#search")) { $("#search").value = ""; renderList(); $("#search").blur(); return; }
     if (!$("#drawer").hidden) return closeDrawer();
     if ($("#app").classList.contains("focus")) return toggleFocus(false);
@@ -1397,6 +1457,8 @@ function bind() {
   $("#brand").onclick = () => showHome();
   $("#paletteBtn").onclick = () => openPalette();
   $("#helpBtn").onclick = () => showHelp();
+  $("#themeBtn").onclick = () => setTheme();
+  $("#scrim").onclick = () => $("#sidebar").classList.remove("open");
   $("#backupBtn").onclick = (e) => { e.preventDefault(); backup(); };
   $("#importBtn").onclick = () => $("#importFile").click();
   $("#importFile").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) importBackup(f); };
@@ -1454,7 +1516,7 @@ function bind() {
 
   $("#widthSeg").onclick = (e) => { const b = e.target.closest("button"); if (b) setWidth(Number(b.dataset.w)); };
   $("#widthRange").oninput = (e) => setWidth(Number(e.target.value) >= 1600 ? 0 : Number(e.target.value));
-  $("#themeSeg").onclick = (e) => { const b = e.target.closest("button"); if (b) { pref.set("pageTheme", b.dataset.t); applyPage(); } };
+  $("#themeSeg").onclick = (e) => { const b = e.target.closest("button"); if (b) setPageTheme(b.dataset.t); };
 
   $("#moreBtn").onclick = (e) => { e.stopPropagation(); $("#pageMenu").hidden = true; $("#moreMenu").hidden = !$("#moreMenu").hidden; };
   $("#pageBtn").onclick = (e) => { e.stopPropagation(); $("#moreMenu").hidden = true; $("#pageMenu").hidden = !$("#pageMenu").hidden; };
@@ -1516,7 +1578,7 @@ function bind() {
   // ---- Cheatsheet ----
   $("#cheatSearch").addEventListener("input", debounce(renderCheat, 80));
   $("#cheatCats").onclick = (e) => { const b = e.target.closest(".chip"); if (b) { state.cheatCat = b.dataset.c; renderCheat(); } };
-  $("#varsToggle").onclick = () => { $("#vars").hidden = !$("#vars").hidden; };
+  $("#varsToggle").onclick = () => { $("#vars").hidden = !$("#vars").hidden; $("#varsToggle").classList.toggle("open", !$("#vars").hidden); };
   $("#vars").addEventListener("input", (e) => {
     const k = e.target.dataset.var; if (!k) return;
     state.vars[k] = e.target.value;
