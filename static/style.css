@@ -826,3 +826,9 @@ ol.setup { margin: 0 0 18px; padding-left: 20px; color: var(--text2); font-size:
 @media (max-width: 860px) { .overlay.clear { justify-content: center; align-items: flex-end; } .modal.bgpick { max-height: 60vh; } }
 .bg[data-mode="warp"] .blob { display: none; }
 :root:not([data-theme="light"]) .bg[data-mode="warp"] .vignette { background: radial-gradient(ellipse 110% 85% at 50% 50%, transparent 45%, rgba(1, 4, 6, .9) 100%); }
+
+/* Cheatsheet : sections par étape */
+.cmd-sec { position: sticky; top: -10px; z-index: 2; display: flex; align-items: center; gap: 8px; margin: 14px -12px 8px; padding: 7px 12px;
+  font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: 1px; color: var(--text2); background: var(--solid); border-bottom: 1px solid var(--line); }
+.cmd-sec:first-child { margin-top: 0; }
+.cmd-sec .dot { width: 8px; height: 8px; border-radius: 50%; }

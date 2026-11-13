@@ -1343,11 +1343,20 @@ function renderCheat() {
   state.cheatView = items;
   $("#cheatCount").textContent = `${items.length} commande${items.length > 1 ? "s" : ""}`;
   const canInsert = !!state.current;
-  $("#cheatList").innerHTML = items.length ? items.map((c, i) => `
+  // Sans recherche : la liste est découpée en sections (étapes du pentest), sinon un badge indique la catégorie
+  const grouped = !$("#cheatSearch").value.trim();
+  let lastSec = null;
+  const section = (c) => {
+    const sec = c.custom ? "★ Mes commandes" : c.cat;
+    if (!grouped || sec === lastSec) return "";
+    lastSec = sec;
+    return `<div class="cmd-sec"><span class="dot" style="background:${c.custom ? "var(--warn)" : window.CHEAT_CATS[c.cat] || "#94a3b8"}"></span>${esc(sec)}</div>`;
+  };
+  $("#cheatList").innerHTML = items.length ? items.map((c, i) => `${section(c)}
     <div class="cmd" data-i="${i}">
       <div class="cmd-head">
         <span class="tt">${esc(c.title)}</span>
-        <span class="badge" style="--c:${window.CHEAT_CATS[c.cat] || "#94a3b8"}">${esc(c.custom ? "★ " + c.cat : c.cat)}</span>
+        ${grouped ? "" : `<span class="badge" style="--c:${window.CHEAT_CATS[c.cat] || "#94a3b8"}">${esc(c.custom ? "★ " + c.cat : c.cat)}</span>`}
         <span class="cmd-acts">
           <button class="icon-btn sm" data-a="copy" title="Copier">${icon("copy")}</button>
           ${canInsert ? `<button class="icon-btn sm" data-a="insert" title="Insérer dans le writeup">${icon("insert")}</button>` : ""}
