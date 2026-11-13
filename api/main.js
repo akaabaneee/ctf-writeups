@@ -1,7 +1,8 @@
 /* ctf://writeups — API pour Vercel (fonction serverless + Vercel Blob privé).
  *
  * Variables d'environnement (Vercel → Settings → Environment Variables) :
- *   BLOB_READ_WRITE_TOKEN  ajoutée automatiquement quand on connecte un store Blob au projet
+ *   BLOB_STORE_ID          ajoutée automatiquement quand on connecte un store Blob au projet
+ *                          (auth OIDC ; les anciens stores donnent BLOB_READ_WRITE_TOKEN, accepté aussi)
  *   CW_PASSWORD            mot de passe du site (obligatoire)
  *
  * Toutes les routes passent ici grâce aux rewrites de vercel.json (?p=...).
@@ -21,8 +22,16 @@ const IMG_RE = /^[a-z0-9_-]+\.(png|jpe?g|gif|webp|bmp)$/;
 const IMG_EXT = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/bmp": "bmp" };
 const MAX_UPLOAD = 4.3 * 1024 * 1024; // limite de corps des fonctions Vercel : 4,5 Mo
 
-const password = () => process.env.CW_PASSWORD || "";
-const configured = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN && password());
+// Store Blob connecté avec un préfixe perso (ex. MONSTORE_READ_WRITE_TOKEN) : on le récupère quand même
+if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  const k = Object.keys(process.env).find((k) => k.endsWith("_READ_WRITE_TOKEN") && String(process.env[k]).startsWith("vercel_blob_rw_"));
+  if (k) process.env.BLOB_READ_WRITE_TOKEN = process.env[k];
+}
+const password = () => (process.env.CW_PASSWORD || "").trim();
+// Nouveaux stores Blob : BLOB_STORE_ID + jeton OIDC fourni par Vercel ; anciens : BLOB_READ_WRITE_TOKEN
+const hasBlob = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
+const missing = () => [!hasBlob() && "BLOB_STORE_ID", !password() && "CW_PASSWORD"].filter(Boolean);
+const configured = () => missing().length === 0;
 const sha = (s) => createHash("sha256").update(s).digest();
 const sessionToken = () => createHash("sha256").update("cw-session:" + password()).digest("hex");
 
@@ -74,7 +83,7 @@ async function handle(req, method) {
   const url = new URL(req.url, "http://x");
   const p = (url.searchParams.get("p") || "").replace(/^\/+|\/+$/g, "");
 
-  if (p === "health") return json({ mode: "cloud", configured: configured(), authed: isAuthed(req) });
+  if (p === "health") return json({ mode: "cloud", configured: configured(), missing: missing(), env: process.env.VERCEL_ENV || "", authed: isAuthed(req) });
 
   if (p === "login" && method === "POST") {
     if (!configured()) return json({ error: "site non configuré" }, 503);

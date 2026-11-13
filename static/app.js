@@ -182,17 +182,19 @@ function showLogin() {
   return loginPromise;
 }
 
-function showSetup() {
+function showSetup(h = {}) {
+  const miss = (h.missing || []).map((v) => `<code>${v}</code>`).join(" et ");
   const ov = document.createElement("div");
   ov.className = "overlay lock";
   ov.innerHTML = `
     <div class="modal" style="width:min(560px,94vw)">
       <h3>⚙ Dernière étape : configurer le stockage</h3>
       <p>Le site est en ligne, mais il faut lui donner un endroit où enregistrer tes writeups pour toujours. Sur <b>vercel.com</b>, dans ton projet :</p>
+      ${miss ? `<p class="login-err">Variable(s) introuvable(s) dans le déploiement actuel${h.env ? ` (<b>${h.env}</b>)` : ""} : ${miss}</p>` : ""}
       <ol class="setup">
         <li><b>Storage</b> → <b>Create Database</b> → <b>Blob</b> → crée-le et <b>connecte-le</b> à ce projet.</li>
-        <li><b>Settings</b> → <b>Environment Variables</b> → ajoute <code>CW_PASSWORD</code> = ton mot de passe (long et unique).</li>
-        <li><b>Deployments</b> → les <b>⋯</b> du dernier déploiement → <b>Redeploy</b>.</li>
+        <li><b>Settings</b> → <b>Environment Variables</b> → ajoute <code>CW_PASSWORD</code> = ton mot de passe (long et unique), en cochant bien l'environnement <b>Production</b>.</li>
+        <li><b>Deployments</b> → les <b>⋯</b> du dernier déploiement → <b>Redeploy</b>. <b>Obligatoire</b> : une variable ajoutée n'est prise en compte que par un <i>nouveau</i> déploiement, recharger la page ne suffit pas.</li>
       </ol>
       <div class="acts"><button class="btn-primary" onclick="location.reload()">J'ai fini, recharger</button></div>
     </div>`;
@@ -1603,7 +1605,7 @@ function route() {
     $("#modeNote").hidden = false;
   }
   if (state.mode === "cloud") {
-    if (!health.configured) return showSetup();
+    if (!health.configured) return showSetup(health);
     if (!health.authed) await showLogin();
   }
   try {
