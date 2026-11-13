@@ -1097,6 +1097,7 @@ async function flush() { if (state.dirty) await saveNow(); else if (state.saving
 
 async function showHome({ push = true } = {}) {
   await flush();
+  const fromEditor = !!state.current;
   state.current = null;
   $("#editorView").hidden = true;
   $("#dashboard").hidden = false;
@@ -1104,6 +1105,7 @@ async function showHome({ push = true } = {}) {
   document.title = "ctf://writeups";
   if (push) history.pushState(null, "", "#/");
   renderList(); renderDashboard(); playEnter();
+  if (fromEditor) window.CW_FX?.home?.jump();     // nouveau saut en hyperespace en revenant à l'accueil
   if (!$("#drawer").hidden && state.drawerTab !== "tools") openDrawer(state.drawerTab, { focus: false });
   $("#sidebar").classList.remove("open");
 }
@@ -1423,6 +1425,7 @@ const ACTIONS = [
   { t: "Télécharger une sauvegarde", i: "download", run: () => backup() },
   { t: "Importer une sauvegarde (.json)", i: "upload", run: () => $("#importFile").click() },
   { t: "Changer le fond de l'accueil", i: "image", run: () => showBgPicker() },
+  { t: "Sauter en hyperespace", i: "arrow", run: () => { showHome().then(() => { window.CW_FX?.home?.set("warp"); window.CW_FX?.home?.jump(); }); } },
   { t: "Raccourcis clavier", i: "help", run: () => showHelp() },
   { t: "Se déconnecter / changer de compte", i: "logout", cloud: true, run: () => logout() },
 ];

@@ -218,30 +218,87 @@
     },
   };
 
-  /* 4. Hyperespace : étoiles qui filent vers l'écran (warp) */
+  /* 4. Hyperespace façon Star Wars : étoiles calmes → accélération (les étoiles s'étirent) → flash →
+        tunnel de traînées bleu-blanc qui défile, avec halo bleu au centre. jump() relance le saut. */
   MODES.warp = {
-    name: "Hyperespace", desc: "Champ d'étoiles qui file vers toi, la souris oriente la trajectoire",
+    name: "Hyperespace", desc: "Saut en hyperespace façon Star Wars : accélération, étoiles étirées, flash puis tunnel bleu",
     init(E) {
-      const N = Math.round((E.W * E.H) / 3500);
-      const stars = Array.from({ length: N }, () => ({ x: rand(-1, 1), y: rand(-1, 1), z: rand(0.05, 1) }));
+      const N = Math.max(260, Math.min(760, Math.round((E.W * E.H) / 2400)));
+      const spawn = (s, far) => {
+        // pas d'étoile pile au centre (sinon point fixe dans l'axe)
+        let x, y; do { x = rand(-1.6, 1.6); y = rand(-1.1, 1.1); } while (x * x + y * y < 0.012);
+        s.x = x; s.y = y; s.z = far ? 1 : rand(0.08, 1); s.b = rand(0.55, 1); s.blue = Math.random() < 0.55;
+        return s;
+      };
+      const stars = Array.from({ length: N }, () => spawn({}, false));
       const c = { x: E.W / 2, y: E.H / 2 };
+      let t = 0, v = 0.02, flash = 0, flashed = false, rot = 0;
+      const IDLE = 1.1, ACC = 1.9;           // durées (s) du calme puis de l'accélération
+      const speedAt = (tt) => {
+        if (tt < IDLE) return 0.02;
+        if (tt < IDLE + ACC) { const k = (tt - IDLE) / ACC; return 0.02 + Math.pow(k, 3.2) * 3.6; }
+        return 1.5 + Math.sin(tt * 1.1) * 0.12;   // croisière, légère respiration
+      };
       return {
+        jump() { t = 0; flashed = false; },
         draw(dt) {
-          const { ctx, W, H } = E;
-          ctx.clearRect(0, 0, W, H);
-          const tx = E.mouse.x > -500 ? W / 2 + (E.mouse.x - W / 2) * 0.25 : W / 2, ty = E.mouse.y > -500 ? H / 2 + (E.mouse.y - H / 2) * 0.25 : H / 2;
-          c.x += (tx - c.x) * Math.min(1, dt * 2); c.y += (ty - c.y) * Math.min(1, dt * 2);
-          const F = Math.max(W, H) * 0.5;
+          const { ctx, W, H, mouse } = E;
+          t += dt;
+          v = speedAt(t);
+          if (!flashed && t > IDLE + ACC * 0.93) { flash = 1; flashed = true; }
+          const hyper = Math.min(1, Math.max(0, (v - 0.15) / 1.3));     // 0 = étoiles, 1 = hyperespace
+          // fond : espace profond (en sombre), effacement complet à chaque image
+          if (E.light) ctx.clearRect(0, 0, W, H);
+          else { ctx.fillStyle = "#01030a"; ctx.fillRect(0, 0, W, H); }
+          const tx = mouse.x > -500 ? W / 2 + (mouse.x - W / 2) * 0.12 : W / 2, ty = mouse.y > -500 ? H / 2 + (mouse.y - H / 2) * 0.12 : H / 2;
+          c.x += (tx - c.x) * Math.min(1, dt * 1.5); c.y += (ty - c.y) * Math.min(1, dt * 1.5);
+          rot += dt * 0.04 * hyper;
+          const F = Math.max(W, H) * 0.42, cr = Math.cos(rot), sr = Math.sin(rot);
+          // halo bleu au fond du tunnel
+          if (hyper > 0.02) {
+            const R = Math.max(W, H) * (0.18 + hyper * 0.28);
+            const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, R);
+            g.addColorStop(0, E.light ? `rgba(70,130,255,${0.16 * hyper})` : `rgba(150,200,255,${0.42 * hyper})`);
+            g.addColorStop(0.35, E.light ? `rgba(70,130,255,${0.08 * hyper})` : `rgba(60,120,255,${0.16 * hyper})`);
+            g.addColorStop(1, "rgba(30,60,200,0)");
+            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+          }
+          ctx.globalCompositeOperation = E.light ? "source-over" : "lighter";
           ctx.lineCap = "round";
+          const tail = Math.min(0.75, 0.004 + v * 0.42);        // longueur de la traînée (en profondeur)
           for (const s of stars) {
-            const pz = s.z; s.z -= dt * 0.22;
-            if (s.z <= 0.02) { s.x = rand(-1, 1); s.y = rand(-1, 1); s.z = 1; continue; }
-            const x = c.x + (s.x / s.z) * F, y = c.y + (s.y / s.z) * F, px = c.x + (s.x / pz) * F, py = c.y + (s.y / pz) * F;
-            if (x < -50 || x > W + 50 || y < -50 || y > H + 50) { s.z = 1; s.x = rand(-1, 1); s.y = rand(-1, 1); continue; }
-            const k = 1 - s.z;
-            ctx.strokeStyle = Math.random() < 0.002 ? rgba(E.c2, 1) : (E.light ? rgba(E.c1, k * 0.9) : `rgba(225,255,245,${(k * 0.95).toFixed(3)})`);
-            ctx.lineWidth = 0.4 + k * 2.2;
-            ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
+            s.z -= v * dt * 0.55;
+            if (s.z <= 0.012) { spawn(s, true); continue; }
+            const zt = Math.min(1.4, s.z + tail);
+            const rx = s.x * cr - s.y * sr, ry = s.x * sr + s.y * cr;
+            const hx = c.x + (rx / s.z) * F, hy = c.y + (ry / s.z) * F;       // tête (proche)
+            const qx = c.x + (rx / zt) * F, qy = c.y + (ry / zt) * F;         // queue (lointaine)
+            if (hx < -80 || hx > W + 80 || hy < -80 || hy > H + 80) { if (s.z < 0.5) spawn(s, true); continue; }
+            const near = 1 - s.z, a = Math.min(1, (0.25 + near) * s.b);
+            const w = 0.5 + near * (1.4 + hyper * 1.8);
+            if (hyper < 0.05) {      // étoiles quasi immobiles : simples points
+              const tw = 0.75 + 0.25 * Math.sin(t * 3 + s.b * 40);     // léger scintillement
+              ctx.fillStyle = E.light ? `rgba(30,50,110,${Math.min(1, a * 1.1) * tw})` : `rgba(230,240,255,${Math.min(1, a * 1.5) * tw})`;
+              ctx.beginPath(); ctx.arc(hx, hy, 0.7 + w * 0.9, 0, TAU); ctx.fill();
+              continue;
+            }
+            // traînée bleue complète, puis tête blanche plus courte
+            ctx.strokeStyle = E.light
+              ? (s.blue ? `rgba(40,90,220,${a * 0.45})` : `rgba(20,40,110,${a * 0.4})`)
+              : (s.blue ? `rgba(90,150,255,${a * 0.55})` : `rgba(170,200,255,${a * 0.45})`);
+            ctx.lineWidth = w;
+            ctx.beginPath(); ctx.moveTo(qx, qy); ctx.lineTo(hx, hy); ctx.stroke();
+            const mx = hx + (qx - hx) * 0.3, my = hy + (qy - hy) * 0.3;
+            ctx.strokeStyle = E.light ? `rgba(10,30,90,${a * 0.6})` : `rgba(235,245,255,${a * 0.9})`;
+            ctx.lineWidth = w * 0.7;
+            ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(hx, hy); ctx.stroke();
+          }
+          ctx.globalCompositeOperation = "source-over";
+          // flash au moment du saut
+          if (flash > 0) {
+            ctx.fillStyle = E.light ? `rgba(255,255,255,${flash * 0.85})` : `rgba(210,230,255,${flash * 0.75})`;
+            ctx.fillRect(0, 0, W, H);
+            flash = Math.max(0, flash - dt * 2.2);
           }
         },
       };
@@ -440,7 +497,7 @@
 
   /* ============================ Fond de l'accueil ============================ */
   const KEY = "cw.bgMode";
-  const getMode = () => { try { const m = JSON.parse(localStorage.getItem(KEY)); return MODES[m] ? m : "circuit"; } catch { return "circuit"; } };
+  const getMode = () => { try { const m = JSON.parse(localStorage.getItem(KEY)); return MODES[m] ? m : "warp"; } catch { return "warp"; } };
 
   function home(canvas) {
     const ctx = canvas.getContext("2d");
@@ -471,6 +528,7 @@
     return {
       set(m) { if (!MODES[m]) return; mode = m; try { localStorage.setItem(KEY, JSON.stringify(m)); } catch {} build(); L.sync(); },
       get: () => mode,
+      jump() { inst?.jump?.(); L.sync(); },
     };
   }
 
