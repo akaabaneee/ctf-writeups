@@ -16,7 +16,7 @@
  *   trash/<id>-<ts>.json   writeups supprimés (récupérables)
  *   cheatsheet.json        commandes perso
  */
-import { put, get, del } from "@vercel/blob";
+import { put, get, del, list } from "@vercel/blob";
 import { createHash, timingSafeEqual, randomBytes } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 
@@ -131,6 +131,39 @@ async function handle(req, method) {
   return session.run(user, () => userRoutes(req, method, p));
 }
 
+/* Liste des writeups, auto-réparatrice.
+   L'index meta/index.json n'est qu'un cache : la vérité, ce sont les fichiers writeups/<id>.json.
+   Deux sauvegardes simultanées (deux onglets, deux appareils) pouvaient chacune réécrire l'index
+   en oubliant le writeup de l'autre, qui disparaissait alors de la liste alors que son fichier
+   existait toujours. On compare donc l'index aux fichiers réellement présents et on le corrige. */
+async function listWriteups() {
+  const idx = (await readJSON("meta/index.json")) || [];
+  const byId = new Map(idx.map((w) => [w.id, w]));
+  const base = K("writeups/");
+  const blobs = [];
+  let cursor;
+  do {
+    const r = await list({ prefix: base, cursor, limit: 1000 });
+    blobs.push(...r.blobs);
+    cursor = r.hasMore ? r.cursor : undefined;
+  } while (cursor);
+  let repaired = blobs.length !== idx.length;
+  const out = await Promise.all(blobs.map(async (b) => {
+    const id = b.pathname.slice(base.length).replace(/\.json$/, "");
+    if (!ID_RE.test(id)) return null;
+    let entry = byId.get(id);
+    // absent de l'index, ou fichier réécrit après la dernière mise à jour de l'index
+    if (!entry || new Date(b.uploadedAt).getTime() > (entry.updated || 0) + 15000) {
+      const doc = await readJSON(`writeups/${id}.json`).catch(() => null);
+      if (doc) { entry = metaOf(doc); repaired = true; }
+    }
+    return entry || null;
+  }));
+  const res = out.filter(Boolean).sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  if (repaired) await writeJSON("meta/index.json", res).catch((e) => console.error("index", e));
+  return res;
+}
+
 /* Routes d'un compte connecté : tout le stockage y est relatif à son espace (K) */
 async function userRoutes(req, method, p) {
 
@@ -165,10 +198,7 @@ async function userRoutes(req, method, p) {
   }
 
   if (p === "writeups") {
-    if (method === "GET") {
-      const idx = (await readJSON("meta/index.json")) || [];
-      return json(idx.sort((a, b) => (b.updated || 0) - (a.updated || 0)));
-    }
+    if (method === "GET") return json(await listWriteups());
     if (method === "POST") {
       const body = await req.json();
       const now = Date.now();

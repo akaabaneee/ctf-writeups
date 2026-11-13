@@ -910,6 +910,15 @@ const refreshDocInfo = debounce(() => {
   if (!$("#drawer").hidden && state.drawerTab === "toc") renderToc();
 }, 350);
 
+/* Brouillon de secours : si une sauvegarde échoue (réseau, serveur) ou si l'onglet se ferme
+   avant l'envoi, le contenu est gardé dans ce navigateur et reproposé à la prochaine ouverture. */
+const draftKey = (id) => `draft.${state.mode}.${state.user || "-"}.${id}`;
+function keepDraft() {
+  if (!state.current || state.mode === "local") return;       // le mode navigateur enregistre déjà localement
+  try { pref.set(draftKey(state.current.id), { at: Date.now(), doc: { ...collect(), content: ed().getContent() } }); } catch {}
+}
+const dropDraft = (id) => { try { localStorage.removeItem("cw." + draftKey(id)); } catch {} };
+
 async function openWriteup(id, { push = true } = {}) {
   await flush();
   let doc;
@@ -931,6 +940,18 @@ async function openWriteup(id, { push = true } = {}) {
   state.loading = false;
   state.dirty = false;
   setSaveState("saved");
+  const draft = pref.get(draftKey(id), null);
+  if (draft && draft.at > (doc.updated || 0) && draft.doc) {
+    // une version plus récente n'avait pas pu être envoyée : on la restaure et on la renvoie
+    state.loading = true;
+    for (const [k, sel] of Object.entries(FIELDS)) if (draft.doc[k] != null) $(sel).value = draft.doc[k];
+    state.current.tags = draft.doc.tags || state.current.tags;
+    e.setContent(draft.doc.content || "");
+    state.loading = false;
+    renderTags(); updateCrumbs();
+    markDirty();
+    toast("↺ Modifications non enregistrées restaurées depuis ce navigateur");
+  } else if (draft) dropDraft(id);
   applyPage();
   refreshDocInfo();
   renderList();
@@ -1001,11 +1022,12 @@ async function saveNow() {
       if (i >= 0) state.list.splice(i, 1);
       state.list.unshift({ ...meta, text: e.getContent({ format: "text" }) });
       if (!state.dirty && state.current === c && e.getContent() !== body.content) markDirty(); // modifié pendant l'envoi
-      if (!state.dirty) setSaveState("saved");
+      if (!state.dirty) { setSaveState("saved"); dropDraft(c.id); }
       document.title = (c.title || "Sans titre") + " · ctf://writeups";
       renderCats(); renderList(); renderDatalist();
     } catch (err) {
       state.dirty = true;
+      keepDraft();
       setSaveState("error");
       toast("⚠ Sauvegarde impossible : " + err.message + " — le serveur tourne ?");
       state.timer = setTimeout(saveNow, 5000);
@@ -1692,6 +1714,7 @@ function bind() {
   window.addEventListener("beforeunload", (e) => {
     if (!state.dirty || !state.current) return;
     if (state.mode === "local") { saveNow(); e.preventDefault(); return; }
+    keepDraft();
     try {
       const c = collect();
       fetch("/api/writeups/" + c.id, { method: "PUT", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...c, content: ed().getContent() }) });
