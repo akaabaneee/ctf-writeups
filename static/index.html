@@ -19,7 +19,6 @@
 <script src="vendor/tinymce/tinymce.min.js"></script>
 <script src="cheatsheet.js"></script>
 <script src="tools.js"></script>
-<script src="bg.js" defer></script>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -59,7 +58,7 @@
   <symbol id="i-zip" viewBox="0 0 24 24"><path d="M4 7l2-3h12l2 3v13H4zM4 7h16M10 11h4"/></symbol>
 </svg>
 
-<div class="bg" aria-hidden="true"><div class="grid"></div><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><canvas id="bgCanvas"></canvas></div>
+<div class="bg" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div><div class="blob b5"></div><div class="grain"></div></div>
 
 <div class="app" id="app">
   <!-- ======================= SIDEBAR ======================= -->
@@ -124,9 +123,9 @@
       <div class="dash-inner">
         <div class="hero">
           <div class="hero-text">
-            <div class="prompt"><span class="u" id="promptUser">root@ctf</span>:<span class="p">~/writeups</span>$ <span class="typed" id="typed"></span><span class="cur"></span></div>
-            <h1><button class="icon-btn only-mobile" data-toggle-sidebar><svg class="ico"><use href="#i-menu"/></svg></button>Ton <span class="grad">arsenal</span> de writeups</h1>
-            <p>Chaque flag documenté, chaque technique retrouvable.</p>
+            <div class="hello-chip"><span class="live"></span><span id="heroDate"></span></div>
+            <h1><button class="icon-btn only-mobile" data-toggle-sidebar><svg class="ico"><use href="#i-menu"/></svg></button><span id="heroGreet">Bonjour</span><span class="grad" id="heroName"></span></h1>
+            <p id="heroSub">Chaque flag documenté, chaque technique retrouvable.</p>
             <p class="mode-note" id="modeNote" hidden>💾 Mode navigateur : tes writeups sont enregistrés <b>dans ce navigateur</b>. Fais régulièrement un <b>Backup</b> (icône ↓ en bas à gauche) pour ne rien perdre.</p>
           </div>
           <div class="quick">
@@ -137,6 +136,7 @@
         </div>
 
         <div id="dashContent">
+          <div class="hero-strip" id="heroStrip"></div>
           <div class="stats" id="stats"></div>
           <div class="dash-grid">
             <div class="panel">

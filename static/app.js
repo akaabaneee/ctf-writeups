@@ -159,7 +159,8 @@ function setUser(id) {
   if (id) document.documentElement.dataset.user = id; else delete document.documentElement.dataset.user;
   const u = (state.users || []).find((x) => x.id === id);
   $("#userChip").hidden = !u;
-  if (u) { $("#userName").textContent = u.name; $("#userAvatar").textContent = u.name[0].toUpperCase(); $("#promptUser").textContent = u.id + "@ctf"; }
+  if (u) { $("#userName").textContent = u.name; $("#userAvatar").textContent = u.name[0].toUpperCase(); }
+  if (!state.current && $("#heroGreet")) renderHero();
 }
 
 /* Écran de verrouillage façon hyprlock : horloge, choix du compte, mot de passe */
@@ -171,7 +172,21 @@ function showLogin() {
     const ov = document.createElement("div");
     ov.className = "overlay lock hypr";
     ov.id = "lockOverlay";
+    const stars = Array.from({ length: 70 }, () => `<circle cx="${(Math.random() * 1600).toFixed(0)}" cy="${(Math.random() * 520).toFixed(0)}" r="${(Math.random() * 1.6 + .4).toFixed(1)}" style="--o:${(Math.random() * .7 + .3).toFixed(2)};--t:${(Math.random() * 4 + 2).toFixed(1)}s;animation-delay:-${(Math.random() * 6).toFixed(1)}s"/>`).join("");
     ov.innerHTML = `
+      <svg class="hl-wall" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <defs>
+          <linearGradient id="hlSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--wp-sky1)"/><stop offset="1" style="stop-color:var(--wp-sky2)"/></linearGradient>
+          <radialGradient id="hlSun"><stop offset="0" style="stop-color:var(--wp-sun)"/><stop offset=".35" style="stop-color:var(--wp-sun);stop-opacity:.55"/><stop offset="1" style="stop-color:var(--wp-sun);stop-opacity:0"/></radialGradient>
+        </defs>
+        <rect width="1600" height="900" fill="url(#hlSky)"/>
+        <g class="stars">${stars}</g>
+        <circle class="sun" cx="1120" cy="320" r="260" fill="url(#hlSun)"/>
+        <path class="m l1" style="fill:var(--wp-m1)" d="M0 560 L120 500 L260 540 L400 440 L560 520 L700 430 L860 500 L1000 410 L1160 490 L1320 420 L1480 480 L1600 440 V900 H0Z"/>
+        <path class="m l2" style="fill:var(--wp-m2)" d="M-60 640 L180 560 L340 620 L520 520 L700 610 L880 540 L1060 620 L1240 530 L1420 600 L1660 550 V900 H-60Z"/>
+        <path class="m l3" style="fill:var(--wp-m3)" d="M-60 740 C200 680 360 720 520 690 C700 655 860 720 1040 690 C1220 660 1400 700 1660 670 V900 H-60Z"/>
+        <path class="m l4" style="fill:var(--wp-m4)" d="M0 820 C240 780 480 830 760 800 C1040 770 1300 820 1600 790 V900 H0Z"/>
+      </svg>
       <div class="hl-clock"><div class="hl-time" id="hlTime"></div><div class="hl-date" id="hlDate"></div></div>
       <form class="hl-card" autocomplete="off">
         <div class="hl-users">${users.map((u) => `
@@ -769,14 +784,60 @@ function renderDatalist() {
 /* =====================================================================
    Tableau de bord
    ===================================================================== */
-function typePrompt() {
-  const el = $("#typed");
-  const txt = "./stats --all";
-  if (el.dataset.done) return;
-  el.dataset.done = 1;
+/* En-tête d'accueil : salutation selon l'heure, prénom, petite phrase selon l'activité */
+function renderHero() {
+  const d = new Date(), h = d.getHours();
+  $("#heroDate").textContent = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  $("#heroGreet").textContent = h < 5 ? "Encore debout" : h < 12 ? "Bonjour" : h < 18 ? "Bon après-midi" : "Bonsoir";
+  const u = (state.users || []).find((x) => x.id === state.user);
+  $("#heroName").textContent = u ? `, ${u.name}` : "";
+  const L = state.list, DAY = 86400000;
+  const todayN = L.filter((w) => w.status === "solved" && (w.date || "") === today()).length;
+  const weekN = L.filter((w) => Date.now() - (w.updated || 0) < 7 * DAY).length;
+  const last = L.reduce((m, w) => Math.max(m, w.updated || 0), 0);
+  const idle = last ? Math.floor((Date.now() - last) / DAY) : 0;
+  const pick = (arr) => arr[d.getDate() % arr.length];
+  let sub;
+  if (!L.length) sub = "Ton carnet de hacker est vide pour l'instant. Premier flag ce soir ?";
+  else if (todayN) sub = `Déjà <b>${todayN} flag${todayN > 1 ? "s" : ""}</b> aujourd'hui. Belle lancée, continue comme ça.`;
+  else if (idle >= 7) sub = `Ça fait <b>${idle} jours</b> sans nouveau writeup. Un petit challenge pour se remettre en jambes ?`;
+  else if (weekN) sub = `<b>${weekN} writeup${weekN > 1 ? "s" : ""}</b> travaillé${weekN > 1 ? "s" : ""} cette semaine. ${pick(["La régularité paie.", "Chaque writeup te rend plus rapide.", "Garde le rythme."])}`;
+  else sub = pick(["Chaque flag documenté, chaque technique retrouvable.", "Note tout : le toi de dans six mois te remerciera.", "Try harder, mais écris-le."]);
+  $("#heroSub").innerHTML = sub;
+}
+
+/* Bandeau « Reprendre » + « Commande du jour » */
+function renderStrip() {
+  const L = state.list;
+  const last = L.find((w) => w.status !== "solved") || L[0];
+  const cmds = window.CHEATSHEET || [];
+  const n = new Date(); const dayIdx = Math.floor((n - new Date(n.getFullYear(), 0, 0)) / 86400000);
+  const c = cmds.length ? cmds[(dayIdx * 37) % cmds.length] : null;
+  $("#heroStrip").innerHTML = `
+    ${last ? `<button class="hs-card" data-id="${last.id}">
+      <span class="hs-ico">${icon(last.status === "solved" ? "file" : "flag")}</span>
+      <span class="hs-body"><span class="hs-k">${last.status === "solved" ? "Dernier writeup" : "Reprendre là où tu t'es arrêté"}</span>
+        <div class="hs-t">${esc(last.title || "Sans titre")}</div>
+        <div class="hs-s">${esc([last.ctf, last.category, STATUS[last.status]?.label].filter(Boolean).join(" · "))} · modifié ${relTime(last.updated)}</div></span>
+      <span class="hs-go">${icon("arrow")}</span></button>` : ""}
+    ${c ? `<div class="hs-card">
+      <span class="hs-ico alt">${icon("term")}</span>
+      <span class="hs-body"><span class="hs-k">Commande du jour · ${esc(c[0].toLowerCase())}</span>
+        <div class="hs-t">${esc(c[1])}</div>
+        <div class="hs-code" data-cmd="${esc(c[2])}" title="Cliquer pour copier">${esc(subst(c[2]).split("\n")[0])}</div></span></div>` : ""}`;
+}
+
+/* Fait apparaître les blocs de l'accueil les uns après les autres */
+function playEnter() {
+  const dash = $("#dashboard");
   let i = 0;
-  const step = () => { el.textContent = txt.slice(0, ++i); if (i < txt.length) setTimeout(step, 45 + Math.random() * 60); };
-  setTimeout(step, 250);
+  $$(".hero-text > *, .quick, .hero-strip > *, .stats > *, .dash-grid > *, .section-title, .cards > *", dash).forEach((el) => {
+    if (el.offsetParent === null) return;
+    el.style.setProperty("--d", Math.min(i++ * 45, 700));
+  });
+  dash.classList.remove("enter"); void dash.offsetWidth; dash.classList.add("enter");
+  clearTimeout(playEnter._t);
+  playEnter._t = setTimeout(() => dash.classList.remove("enter"), 1600);
 }
 
 function relTime(ms) {
@@ -805,8 +866,9 @@ function renderDashboard() {
   const L = state.list;
   $("#emptyState").hidden = L.length > 0;
   $("#dashContent").hidden = !L.length;
-  typePrompt();
+  renderHero();
   if (!L.length) return;
+  renderStrip();
 
   const solved = L.filter((w) => w.status === "solved").length;
   const pts = L.reduce((s, w) => s + (Number(w.points) || 0), 0);
@@ -1052,7 +1114,7 @@ async function showHome({ push = true } = {}) {
   document.body.classList.remove("editing");
   document.title = "ctf://writeups";
   if (push) history.pushState(null, "", "#/");
-  renderList(); renderDashboard();
+  renderList(); renderDashboard(); playEnter();
   if (!$("#drawer").hidden && state.drawerTab !== "tools") openDrawer(state.drawerTab, { focus: false });
   $("#sidebar").classList.remove("open");
 }
@@ -1559,7 +1621,8 @@ function bind() {
     const it = e.target.closest(".item"); if (it) openWriteup(it.dataset.id);
   };
   $("#dashboard").addEventListener("click", (e) => {
-    const c = e.target.closest(".card"); if (c) return openWriteup(c.dataset.id);
+    const hc = e.target.closest(".hs-code"); if (hc) return copyText(subst(hc.dataset.cmd), "Commande copiée");
+    const c = e.target.closest(".card, button.hs-card"); if (c) return openWriteup(c.dataset.id);
     const cb = e.target.closest(".catbar");
     if (cb) { state.catFilter = cb.dataset.cat; pref.set("catFilter", state.catFilter); renderCats(); renderList(); return; }
     const t = e.target.closest("[data-tag]");
