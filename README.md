@@ -18,8 +18,13 @@ tes writeups restent sur ta machine dans `data/` (ignoré par git).
 ## Mettre en ligne sur Vercel (writeups enregistrés pour toujours)
 1. Importe le repo sur Vercel (Framework : *Other*, rien d'autre à régler — `vercel.json` s'occupe du reste).
 2. **Storage → Create Database → Blob** → crée-le et **connecte-le** au projet (Vercel ajoute `BLOB_STORE_ID`, ou `BLOB_READ_WRITE_TOKEN` sur les anciens stores).
-3. **Settings → Environment Variables** → `CW_PASSWORD` = ton mot de passe (long et unique).
+3. **Settings → Environment Variables** → un mot de passe par compte (long, et différent pour chacun) :
+   `CW_PASSWORD_BENJAMIN` et `CW_PASSWORD_HUGO`. L'ancien `CW_PASSWORD` reste accepté pour le compte benjamin.
 4. **Redeploy**.
+
+**Comptes** : le site a deux comptes, `benjamin` et `hugo`, choisis sur l'écran de verrouillage. Chacun a son espace
+privé : un compte ne peut ni lister, ni ouvrir, ni modifier les writeups, images et commandes de l'autre
+(c'est l'API qui cloisonne, pas seulement l'affichage). Pour ajouter un compte : `USERS` dans `api/main.js`.
 
 Tes writeups et images sont alors stockés dans ton **Blob privé** Vercel : accessibles depuis n'importe quel
 appareil après connexion, et personne d'autre ne peut les lire. Les writeups supprimés vont dans `trash/`.

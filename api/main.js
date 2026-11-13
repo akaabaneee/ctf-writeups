@@ -3,10 +3,13 @@
  * Variables d'environnement (Vercel → Settings → Environment Variables) :
  *   BLOB_STORE_ID          ajoutée automatiquement quand on connecte un store Blob au projet
  *                          (auth OIDC ; les anciens stores donnent BLOB_READ_WRITE_TOKEN, accepté aussi)
- *   CW_PASSWORD            mot de passe du site (obligatoire)
+ *   CW_PASSWORD_BENJAMIN   mot de passe du compte benjamin (à défaut : l'ancien CW_PASSWORD)
+ *   CW_PASSWORD_HUGO       mot de passe du compte hugo
  *
  * Toutes les routes passent ici grâce aux rewrites de vercel.json (?p=...).
- * Stockage :
+ * Chaque compte a son propre espace : un compte ne peut ni lister, ni lire, ni modifier
+ * les writeups, images ou commandes d'un autre (toutes les clés passent par K()).
+ * Stockage (sous le préfixe du compte) :
  *   meta/index.json        liste des writeups (métadonnées + texte pour la recherche)
  *   writeups/<id>.json     writeup complet
  *   images/<nom>           images collées
@@ -15,6 +18,15 @@
  */
 import { put, get, del } from "@vercel/blob";
 import { createHash, timingSafeEqual, randomBytes } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
+
+/* Comptes. benjamin garde l'emplacement d'origine (préfixe vide) : ses writeups existants restent en place. */
+const USERS = {
+  benjamin: { name: "Benjamin", prefix: "", legacy: "CW_PASSWORD" },
+  hugo: { name: "Hugo", prefix: "u/hugo/" },
+};
+const session = new AsyncLocalStorage();          // compte de la requête en cours
+const K = (path) => USERS[session.getStore()].prefix + path;
 
 const META_KEYS = ["title", "ctf", "category", "difficulty", "points", "date", "status", "tags", "flag", "pageWidth", "pageTheme", "pinned"];
 const ID_RE = /^[a-f0-9]{12}$/;
@@ -27,34 +39,46 @@ if (!process.env.BLOB_READ_WRITE_TOKEN) {
   const k = Object.keys(process.env).find((k) => k.endsWith("_READ_WRITE_TOKEN") && String(process.env[k]).startsWith("vercel_blob_rw_"));
   if (k) process.env.BLOB_READ_WRITE_TOKEN = process.env[k];
 }
-const password = () => (process.env.CW_PASSWORD || "").trim();
+const passwordOf = (u) => (process.env["CW_PASSWORD_" + u.toUpperCase()] || (USERS[u].legacy && process.env[USERS[u].legacy]) || "").trim();
+const userList = () => Object.entries(USERS).map(([id, u]) => ({ id, name: u.name, ready: Boolean(passwordOf(id)) }));
 // Nouveaux stores Blob : BLOB_STORE_ID + jeton OIDC fourni par Vercel ; anciens : BLOB_READ_WRITE_TOKEN
 const hasBlob = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
-const missing = () => [!hasBlob() && "BLOB_STORE_ID", !password() && "CW_PASSWORD"].filter(Boolean);
+const missing = () => [!hasBlob() && "BLOB_STORE_ID", !userList().some((u) => u.ready) && "CW_PASSWORD_BENJAMIN"].filter(Boolean);
 const configured = () => missing().length === 0;
 const sha = (s) => createHash("sha256").update(s).digest();
-const sessionToken = () => createHash("sha256").update("cw-session:" + password()).digest("hex");
+const sessionToken = (u) => createHash("sha256").update(`cw-session:${u}:${passwordOf(u)}`).digest("hex");
 
 const json = (obj, status = 200, headers = {}) =>
   new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
 
-function isAuthed(req) {
-  if (!configured()) return false;
-  const m = (req.headers.get("cookie") || "").match(/(?:^|;\s*)cw_auth=([a-f0-9]{64})/);
-  if (!m) return false;
-  const a = Buffer.from(m[1]), b = Buffer.from(sessionToken());
-  return a.length === b.length && timingSafeEqual(a, b);
+/* Renvoie l'identifiant du compte connecté (cookie valide), sinon null */
+function authedUser(req) {
+  if (!configured()) return null;
+  const m = (req.headers.get("cookie") || "").match(/(?:^|;\s*)cw_auth=([a-z]{1,20})\.([a-f0-9]{64})(?:;|$)/);
+  if (!m || !Object.hasOwn(USERS, m[1]) || !passwordOf(m[1])) return null;
+  const a = Buffer.from(m[2]), b = Buffer.from(sessionToken(m[1]));
+  return a.length === b.length && timingSafeEqual(a, b) ? m[1] : null;
 }
+/* Protège l'API contre les requêtes envoyées par un autre site ouvert dans le navigateur.
+   Sur Vercel, l'en-tête Host vu par la fonction n'est pas toujours le domaine public (proxy, alias,
+   domaine perso) : on se fie d'abord à Sec-Fetch-Site, posé par le navigateur et non falsifiable par
+   une page, puis on compare Origin à tous les noms d'hôte connus de la requête. */
 function sameOrigin(req) {
+  const site = req.headers.get("sec-fetch-site");
+  if (site) return site === "same-origin" || site === "none";
   const origin = req.headers.get("origin");
   if (!origin) return true;
-  try { return new URL(origin).host === req.headers.get("host"); } catch { return false; }
+  let host;
+  try { host = new URL(origin).host; } catch { return false; }
+  const hosts = [req.headers.get("x-forwarded-host"), req.headers.get("host")];
+  try { hosts.push(new URL(req.url).host); } catch {}
+  return hosts.filter(Boolean).flatMap((h) => h.split(",")).some((h) => h.trim() === host);
 }
 
 /* ---------- Blob ---------- */
 async function readJSON(path) {
   try {
-    const r = await get(path, { access: "private", useCache: false });
+    const r = await get(K(path), { access: "private", useCache: false });
     if (!r || r.statusCode !== 200) return null;
     return JSON.parse(await new Response(r.stream).text());
   } catch (e) {
@@ -63,7 +87,7 @@ async function readJSON(path) {
   }
 }
 const writeJSON = (path, obj) =>
-  put(path, JSON.stringify(obj), { access: "private", addRandomSuffix: false, allowOverwrite: true, contentType: "application/json", cacheControlMaxAge: 60 });
+  put(K(path), JSON.stringify(obj), { access: "private", addRandomSuffix: false, allowOverwrite: true, contentType: "application/json", cacheControlMaxAge: 60 });
 
 const plainText = (html) =>
   String(html || "").replace(/<img[^>]*>/gi, " ").replace(/<[^>]+>/g, " ")
@@ -83,27 +107,36 @@ async function handle(req, method) {
   const url = new URL(req.url, "http://x");
   const p = (url.searchParams.get("p") || "").replace(/^\/+|\/+$/g, "");
 
-  if (p === "health") return json({ mode: "cloud", configured: configured(), missing: missing(), env: process.env.VERCEL_ENV || "", authed: isAuthed(req) });
+  const user = authedUser(req);
+  if (p === "health") return json({ mode: "cloud", configured: configured(), missing: missing(), env: process.env.VERCEL_ENV || "", authed: Boolean(user), user, users: userList() });
 
   if (p === "login" && method === "POST") {
     if (!configured()) return json({ error: "site non configuré" }, 503);
     let body = {};
     try { body = await req.json(); } catch {}
-    const ok = timingSafeEqual(sha(String(body.password || "")), sha(password()));
+    const who = String(body.user || "benjamin").toLowerCase();
+    const known = Object.hasOwn(USERS, who) && Boolean(passwordOf(who));
+    // comparaison toujours effectuée (même compte inconnu) pour ne rien révéler par le temps de réponse
+    const ok = timingSafeEqual(sha(String(body.password || "")), sha(known ? passwordOf(who) : randomBytes(16).toString("hex"))) && known;
     if (!ok) { await new Promise((r) => setTimeout(r, 900)); return json({ error: "mot de passe incorrect" }, 401); }
-    return json({ ok: true }, 200, { "set-cookie": `cw_auth=${sessionToken()}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000` });
+    return json({ ok: true, user: who }, 200, { "set-cookie": `cw_auth=${who}.${sessionToken(who)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000` });
   }
   if (p === "logout") return json({ ok: true }, 200, { "set-cookie": "cw_auth=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0" });
 
-  if (!configured()) return json({ error: "site non configuré : ajoute un store Blob et la variable CW_PASSWORD sur Vercel" }, 503);
-  if (!isAuthed(req)) return json({ error: "non connecté" }, 401);
+  if (!configured()) return json({ error: "site non configuré : ajoute un store Blob et la variable CW_PASSWORD_BENJAMIN sur Vercel" }, 503);
+  if (!user) return json({ error: "non connecté" }, 401);
   if (method !== "GET" && !sameOrigin(req)) return json({ error: "origine refusée" }, 403);
+  return session.run(user, () => userRoutes(req, method, p));
+}
+
+/* Routes d'un compte connecté : tout le stockage y est relatif à son espace (K) */
+async function userRoutes(req, method, p) {
 
   // Images
   let m = p.match(/^img\/(.+)$/);
   if (m) {
     if (!IMG_RE.test(m[1])) return json({ error: "nom invalide" }, 400);
-    const r = await get("images/" + m[1], { access: "private" }).catch(() => null);
+    const r = await get(K("images/" + m[1]), { access: "private" }).catch(() => null);
     if (!r || r.statusCode !== 200) return json({ error: "introuvable" }, 404);
     return new Response(r.stream, { headers: { "content-type": r.blob.contentType, "cache-control": "private, max-age=31536000, immutable" } });
   }
@@ -115,7 +148,7 @@ async function handle(req, method) {
     const buf = Buffer.from(await req.arrayBuffer());
     if (buf.length > MAX_UPLOAD) return json({ error: "image trop lourde (max 4 Mo)" }, 413);
     const name = `${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${randomBytes(5).toString("hex")}.${ext}`;
-    await put("images/" + name, buf, { access: "private", addRandomSuffix: false, contentType: ctype });
+    await put(K("images/" + name), buf, { access: "private", addRandomSuffix: false, contentType: ctype });
     return json({ location: "/images/" + name });
   }
 
@@ -164,7 +197,7 @@ async function handle(req, method) {
     }
     if (method === "DELETE") {
       await writeJSON(`trash/${id}-${Date.now()}.json`, doc); // récupérable
-      await del(path);
+      await del(K(path));
       await updateIndex((idx) => idx.filter((w) => w.id !== id));
       return json({ ok: true });
     }

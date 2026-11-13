@@ -680,3 +680,75 @@ body.resizing, body.resizing * { cursor: ew-resize !important; user-select: none
 @keyframes shake { 20%, 60% { transform: translateX(-7px); } 40%, 80% { transform: translateX(7px); } }
 .modal code { font-family: var(--mono); font-size: 12px; background: var(--panel3); padding: 1px 6px; border-radius: 5px; color: var(--accent-text); }
 ol.setup { margin: 0 0 18px; padding-left: 20px; color: var(--text2); font-size: 13.5px; display: grid; gap: 8px; }
+
+/* =========================== COMPTES =========================== */
+/* Chaque compte a sa teinte : benjamin = vert (défaut), hugo = violet */
+:root[data-user="hugo"], [data-user="hugo"] {
+  --accent: #8b7bff; --accent2: #b3a8ff; --accent-ink: #0d0a2b; --accent-text: #a99cff; --cyan: #f472b6; --cyan-text: #f58fc4;
+  --accent-soft: rgba(139, 123, 255, .13); --accent-line: rgba(139, 123, 255, .42);
+  --glow: 0 0 0 1px rgba(139, 123, 255, .34), 0 0 28px rgba(139, 123, 255, .18);
+  --btn-shadow: 0 0 0 1px rgba(139, 123, 255, .5), 0 8px 26px rgba(139, 123, 255, .26);
+  --btn-shadow-hover: 0 0 0 1px #b3a8ff, 0 10px 34px rgba(139, 123, 255, .42);
+  --text-glow: 0 0 18px rgba(139, 123, 255, .5);
+  --heat1: #2b2466; --heat2: #4a3fb0; --heat3: #6f61e6; --heat4: #9d91ff;
+  --blob1: rgba(139, 123, 255, .18); --blob2: rgba(244, 114, 182, .12); --net: 178, 168, 255;
+}
+:root[data-theme="light"][data-user="hugo"], :root[data-theme="light"] [data-user="hugo"] {
+  --accent: #7c6cf5; --accent2: #9a8cff; --accent-ink: #ffffff; --accent-text: #5b47d6; --cyan: #db2777; --cyan-text: #be185d;
+  --accent-soft: rgba(109, 90, 230, .1); --accent-line: rgba(109, 90, 230, .4);
+  --glow: 0 0 0 1px rgba(109, 90, 230, .28), 0 10px 30px rgba(109, 90, 230, .15);
+  --btn-shadow: 0 1px 2px rgba(76, 58, 190, .3), 0 8px 22px rgba(124, 108, 245, .3);
+  --btn-shadow-hover: 0 1px 2px rgba(76, 58, 190, .35), 0 12px 30px rgba(124, 108, 245, .42);
+  --text-glow: none;
+  --heat1: #d9d4ff; --heat2: #b0a6fb; --heat3: #8676f2; --heat4: #5b47d6;
+  --blob1: rgba(124, 108, 245, .2); --blob2: rgba(236, 72, 153, .14); --net: 91, 71, 214;
+}
+:root[data-user="hugo"] .logo, [data-user="hugo"] .hl-avatar { background: linear-gradient(145deg, #2a2170, #0d0a2b 75%); }
+:root[data-user="hugo"] .logo svg { fill: #a99cff; filter: drop-shadow(0 0 6px rgba(139, 123, 255, .7)); }
+
+.user-chip { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.uc-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.uc-text b { font-size: 13px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uc-text span { font: 10.5px var(--mono); color: var(--muted); }
+.hl-avatar {
+  width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  font: 700 26px var(--sans); color: #fff; background: linear-gradient(145deg, #0c3a2b, #04140e 75%);
+  border: 2px solid var(--accent-line); box-shadow: 0 8px 26px rgba(0, 0, 0, .28), inset 0 1px 0 rgba(255, 255, 255, .14);
+}
+.hl-avatar.sm { width: 30px; height: 30px; font-size: 13px; border-width: 1px; box-shadow: none; }
+
+/* ---------- Écran de verrouillage façon hyprlock ---------- */
+.overlay.lock.hypr {
+  flex-direction: column; align-items: center; justify-content: center; gap: 34px; padding: 24px 16px;
+  background: var(--lock); -webkit-backdrop-filter: blur(28px) saturate(1.5); backdrop-filter: blur(28px) saturate(1.5);
+}
+.hl-clock { text-align: center; }
+.hl-time { font: 800 clamp(64px, 13vw, 132px)/1 var(--sans); letter-spacing: -4px; font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, var(--text) 30%, color-mix(in srgb, var(--accent-text) 70%, var(--text))); -webkit-background-clip: text; background-clip: text; color: transparent; padding-bottom: .06em; }
+.hl-date { font: 500 clamp(14px, 2vw, 19px) var(--sans); color: var(--text2); margin-top: 6px; text-transform: capitalize; }
+.hl-card { display: flex; flex-direction: column; align-items: center; gap: 16px; width: min(360px, 100%); animation: pop .25s ease-out; }
+.hl-users { display: flex; gap: 22px; justify-content: center; }
+.hl-user { background: none; border: 0; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--muted); opacity: .5; transform: scale(.82); transition: transform .2s, opacity .2s; }
+.hl-user:hover { opacity: .85; }
+.hl-user.on { opacity: 1; transform: none; color: var(--text); }
+.hl-user.on .hl-avatar { box-shadow: 0 0 0 4px var(--accent-soft), 0 10px 34px rgba(0, 0, 0, .3); border-color: var(--accent); }
+.hl-name { font: 600 12px var(--mono); }
+.hl-hello { font-size: 17px; color: var(--text2); }
+.hl-hello b { color: var(--text); font-weight: 700; }
+.hl-pw {
+  display: flex; align-items: center; gap: 10px; width: 100%; height: 50px; padding: 0 6px 0 18px; border-radius: 999px;
+  background: var(--panel); border: 1.5px solid var(--line2); box-shadow: var(--shadow); transition: border-color .15s, box-shadow .15s;
+}
+.hl-pw:focus-within { border-color: var(--accent); box-shadow: var(--shadow), 0 0 0 4px var(--accent-soft); }
+.hl-pw .ico { color: var(--muted); width: 17px; height: 17px; }
+.hl-pw input { flex: 1; min-width: 0; height: 100%; background: none; border: 0; outline: none; font-size: 15px; letter-spacing: .5px; }
+.hl-pw input:disabled { cursor: not-allowed; }
+.hl-pw button { width: 38px; height: 38px; border-radius: 50%; border: 0; display: grid; place-items: center; background: linear-gradient(180deg, var(--accent2), var(--accent)); color: var(--accent-ink); transition: transform .12s, filter .12s; }
+.hl-pw button:hover { transform: scale(1.06); filter: brightness(1.06); }
+.hl-card.busy .hl-pw button { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.hl-card .login-err { text-align: center; font-size: 12px; line-height: 1.5; }
+.hl-card .login-err code { font-family: var(--mono); background: var(--panel3); padding: 1px 5px; border-radius: 5px; color: var(--accent-text); }
+.hl-foot { position: absolute; bottom: 22px; left: 0; right: 0; text-align: center; font: 11px var(--mono); color: var(--muted); }
+.hl-foot .u { color: var(--accent-text); }
+@media (max-height: 560px) { .hl-foot { display: none; } .overlay.lock.hypr { gap: 18px; } }

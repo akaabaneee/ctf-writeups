@@ -151,32 +151,80 @@ async function detectMode() {
 
 /* ---- Cloud (Vercel) : connexion par mot de passe ---- */
 let loginPromise = null;
+const USER_FALLBACK = [{ id: "benjamin", name: "Benjamin", ready: true }];
+
+/* Applique le compte connecté : teinte de l'interface + nom dans la barre latérale */
+function setUser(id) {
+  state.user = id || null;
+  if (id) document.documentElement.dataset.user = id; else delete document.documentElement.dataset.user;
+  const u = (state.users || []).find((x) => x.id === id);
+  $("#userChip").hidden = !u;
+  if (u) { $("#userName").textContent = u.name; $("#userAvatar").textContent = u.name[0].toUpperCase(); $("#promptUser").textContent = u.id + "@ctf"; }
+}
+
+/* Écran de verrouillage façon hyprlock : horloge, choix du compte, mot de passe */
 function showLogin() {
   if (loginPromise) return loginPromise;
   loginPromise = new Promise((resolve) => {
+    const users = state.users?.length ? state.users : USER_FALLBACK;
+    let sel = users.find((u) => u.id === (state.user || pref.get("lastUser", ""))) || users.find((u) => u.ready) || users[0];
     const ov = document.createElement("div");
-    ov.className = "overlay lock";
+    ov.className = "overlay lock hypr";
     ov.id = "lockOverlay";
     ov.innerHTML = `
-      <form class="modal login">
-        <div class="login-logo"><svg viewBox="0 0 24 24"><path d="M6 21V3h1.8v1.3c3.2-1.8 6.2 1 9.4-.4v8.7c-3.2 1.4-6.2-1.4-9.4.4V21z"/></svg></div>
-        <div class="prompt"><span class="u">guest@ctf</span>:<span class="p">~</span>$ sudo ./writeups</div>
-        <h3>Accès protégé</h3>
-        <p>Entre le mot de passe du site (variable <code>CW_PASSWORD</code> sur Vercel).</p>
-        <input class="input mono" type="password" name="pw" placeholder="mot de passe" autocomplete="current-password" required>
+      <div class="hl-clock"><div class="hl-time" id="hlTime"></div><div class="hl-date" id="hlDate"></div></div>
+      <form class="hl-card" autocomplete="off">
+        <div class="hl-users">${users.map((u) => `
+          <button type="button" class="hl-user" data-u="${esc(u.id)}" data-user="${esc(u.id)}" title="${esc(u.name)}">
+            <span class="hl-avatar">${esc(u.name[0].toUpperCase())}</span><span class="hl-name">${esc(u.name)}</span>
+          </button>`).join("")}</div>
+        <div class="hl-hello" id="hlHello"></div>
+        <label class="hl-pw">
+          <svg class="ico"><use href="#i-lock"/></svg>
+          <input type="password" name="pw" placeholder="Mot de passe" autocomplete="current-password" required>
+          <button type="submit" title="Déverrouiller">${icon("arrow")}</button>
+        </label>
         <div class="login-err" hidden></div>
-        <button class="btn-primary wide" type="submit">Se connecter</button>
-      </form>`;
+      </form>
+      <div class="hl-foot"><span class="u">ctf://writeups</span> · session verrouillée · <kbd>Entrée</kbd> pour déverrouiller</div>`;
     document.body.appendChild(ov);
     const form = $("form", ov), err = $(".login-err", ov), input = $("input", ov);
-    input.focus();
+    const tick = () => {
+      const d = new Date();
+      $("#hlTime").textContent = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      $("#hlDate").textContent = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+    };
+    tick();
+    const clock = setInterval(tick, 5000);
+    const pick = (u) => {
+      sel = u;
+      ov.dataset.user = u.id;                       // teinte de l'écran selon le compte choisi
+      $$(".hl-user", ov).forEach((b) => b.classList.toggle("on", b.dataset.u === u.id));
+      $("#hlHello").innerHTML = `Bonjour, <b>${esc(u.name)}</b>`;
+      err.hidden = u.ready;
+      if (!u.ready) err.innerHTML = `Ce compte n'est pas encore activé : ajoute la variable <code>CW_PASSWORD_${esc(u.id.toUpperCase())}</code> sur Vercel, puis redéploie.`;
+      input.disabled = !u.ready;
+      input.value = "";
+      if (u.ready) input.focus();
+    };
+    $(".hl-users", ov).onclick = (e) => { const b = e.target.closest(".hl-user"); if (b) pick(users.find((u) => u.id === b.dataset.u)); };
+    pick(sel);
     form.onsubmit = async (e) => {
       e.preventDefault();
+      if (!sel.ready) return;
       err.hidden = true;
-      $("button", form).disabled = true;
-      const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: input.value }) }).catch(() => null);
-      $("button", form).disabled = false;
-      if (r?.ok) { ov.remove(); loginPromise = null; resolve(); return; }
+      form.classList.add("busy");
+      const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user: sel.id, password: input.value }) }).catch(() => null);
+      form.classList.remove("busy");
+      if (r?.ok) {
+        clearInterval(clock);
+        pref.set("lastUser", sel.id);
+        const changed = state.user && state.user !== sel.id;
+        setUser(sel.id);
+        ov.remove(); loginPromise = null;
+        if (changed) return location.reload();      // autre compte : on repart de zéro, rien ne doit rester à l'écran
+        resolve(); return;
+      }
       err.textContent = r ? (await r.json().catch(() => ({}))).error || "Erreur" : "Serveur injoignable";
       err.hidden = false;
       input.select();
@@ -197,7 +245,7 @@ function showSetup(h = {}) {
       ${miss ? `<p class="login-err">Variable(s) introuvable(s) dans le déploiement actuel${h.env ? ` (<b>${h.env}</b>)` : ""} : ${miss}</p>` : ""}
       <ol class="setup">
         <li><b>Storage</b> → <b>Create Database</b> → <b>Blob</b> → crée-le et <b>connecte-le</b> à ce projet.</li>
-        <li><b>Settings</b> → <b>Environment Variables</b> → ajoute <code>CW_PASSWORD</code> = ton mot de passe (long et unique), en cochant bien l'environnement <b>Production</b>.</li>
+        <li><b>Settings</b> → <b>Environment Variables</b> → ajoute <code>CW_PASSWORD_BENJAMIN</code> et <code>CW_PASSWORD_HUGO</code> (un mot de passe long et différent par compte), en cochant bien l'environnement <b>Production</b>.</li>
         <li><b>Deployments</b> → les <b>⋯</b> du dernier déploiement → <b>Redeploy</b>. <b>Obligatoire</b> : une variable ajoutée n'est prise en compte que par un <i>nouveau</i> déploiement, recharger la page ne suffit pas.</li>
       </ol>
       <div class="acts"><button class="btn-primary" onclick="location.reload()">J'ai fini, recharger</button></div>
@@ -1297,7 +1345,7 @@ const ACTIONS = [
   { t: "Télécharger une sauvegarde", i: "download", run: () => backup() },
   { t: "Importer une sauvegarde (.json)", i: "upload", run: () => $("#importFile").click() },
   { t: "Raccourcis clavier", i: "help", run: () => showHelp() },
-  { t: "Se déconnecter", i: "x", cloud: true, run: () => logout() },
+  { t: "Se déconnecter / changer de compte", i: "logout", cloud: true, run: () => logout() },
 ];
 
 function makeOverlay(html) {
@@ -1458,6 +1506,7 @@ function bind() {
   $("#paletteBtn").onclick = () => openPalette();
   $("#helpBtn").onclick = () => showHelp();
   $("#themeBtn").onclick = () => setTheme();
+  $("#logoutBtn").onclick = () => logout();
   $("#scrim").onclick = () => $("#sidebar").classList.remove("open");
   $("#backupBtn").onclick = (e) => { e.preventDefault(); backup(); };
   $("#importBtn").onclick = () => $("#importFile").click();
@@ -1667,8 +1716,9 @@ function route() {
     $("#modeNote").hidden = false;
   }
   if (state.mode === "cloud") {
+    state.users = health.users || USER_FALLBACK;
     if (!health.configured) return showSetup(health);
-    if (!health.authed) await showLogin();
+    if (health.authed) setUser(health.user || "benjamin"); else await showLogin();
   }
   try {
     [state.list, state.custom] = await Promise.all([api.list(), api.cheat().catch(() => [])]);

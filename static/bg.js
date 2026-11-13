@@ -89,7 +89,7 @@
   document.addEventListener("visibilitychange", sync);
   reduce.addEventListener?.("change", sync);
   // Changement de thème ou passage tableau de bord ↔ éditeur
-  new MutationObserver(() => { readColor(); sync(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  new MutationObserver(() => { readColor(); sync(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-user"] });
   new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ["class"] });
 
   readColor();
