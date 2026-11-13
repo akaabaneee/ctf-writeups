@@ -128,34 +128,32 @@ kbd { white-space: nowrap; font-family: var(--mono); font-size: 10.5px; line-hei
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 9px; border: 2px solid transparent; background-clip: content-box; }
 
-/* =========================== FOND : DÉGRADÉ MAILLÉ =========================== */
-/* Grandes taches de couleur très floues qui dérivent lentement + grain léger (effet papier) */
-:root {
-  --m1: #00d68f; --m2: #22d3ee; --m3: #7c5cff; --m4: #f472b6; --m5: #0ea5e9; --mesh-o: .34; --mesh-base: #070a10;
-}
-:root[data-theme="light"] {
-  --m1: #7ef0c6; --m2: #93dcff; --m3: #c4b5fd; --m4: #fbc4dc; --m5: #ffe2b8; --mesh-o: .75; --mesh-base: #f4f6fb;
-}
-:root[data-user="hugo"] { --m1: #8b7bff; --m2: #f472b6; --m3: #22d3ee; --m4: #c084fc; --m5: #6366f1; }
-:root[data-theme="light"][data-user="hugo"] { --m1: #c7bfff; --m2: #fbc4dc; --m3: #a5e9f5; --m4: #e3c8ff; --m5: #c7d2fe; }
+/* =========================== FOND : CIRCUIT IMPRIMÉ ANIMÉ =========================== */
+/* Le dessin (pistes, impulsions, lentille sous la souris) est fait par fx.js dans #bgCanvas.
+   Ici : la base, deux halos colorés qui respirent, une ligne de balayage et un vignettage. */
+:root { --net2: 34, 211, 238; --mesh-base: #05080d; --halo-o: .22; }
+:root[data-theme="light"] { --net2: 8, 145, 178; --mesh-base: #f2f5f9; --halo-o: .45; }
+:root[data-user="hugo"] { --net2: 244, 114, 182; }
+:root[data-theme="light"][data-user="hugo"] { --net2: 219, 39, 119; }
 .bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: var(--mesh-base); }
-.bg .blob { position: absolute; border-radius: 50%; filter: blur(90px); opacity: var(--mesh-o); will-change: transform; transition: opacity .6s, background-color .8s; }
-.bg .b1 { width: 52vmax; height: 52vmax; left: -14vmax; top: -18vmax; background: var(--m1); animation: mesh1 32s ease-in-out infinite alternate; }
-.bg .b2 { width: 46vmax; height: 46vmax; right: -12vmax; top: -16vmax; background: var(--m2); animation: mesh2 38s ease-in-out infinite alternate; }
-.bg .b3 { width: 50vmax; height: 50vmax; left: 26vw; bottom: -30vmax; background: var(--m3); animation: mesh3 44s ease-in-out infinite alternate; }
-.bg .b4 { width: 34vmax; height: 34vmax; right: 6vw; bottom: -10vmax; background: var(--m4); animation: mesh4 36s ease-in-out infinite alternate; opacity: calc(var(--mesh-o) * .8); }
-.bg .b5 { width: 30vmax; height: 30vmax; left: 30vw; top: 18vh; background: var(--m5); animation: mesh5 50s ease-in-out infinite alternate; opacity: calc(var(--mesh-o) * .55); }
-@keyframes mesh1 { 50% { transform: translate(14vw, 10vh) scale(1.15); } to { transform: translate(4vw, 26vh) scale(.95); } }
-@keyframes mesh2 { 50% { transform: translate(-16vw, 14vh) scale(.9); } to { transform: translate(-6vw, 30vh) scale(1.1); } }
-@keyframes mesh3 { 50% { transform: translate(-18vw, -12vh) scale(1.12); } to { transform: translate(10vw, -20vh) scale(.92); } }
-@keyframes mesh4 { 50% { transform: translate(-22vw, -18vh) scale(1.2); } to { transform: translate(-8vw, -4vh); } }
-@keyframes mesh5 { 50% { transform: translate(18vw, 14vh) scale(1.3); } to { transform: translate(-14vw, 6vh) scale(.9); } }
-.bg .grain {
-  position: absolute; inset: -50%; opacity: .07; mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+.bg canvas { position: absolute; inset: 0; width: 100%; height: 100%; transition: opacity .6s; }
+.bg .blob { position: absolute; border-radius: 50%; filter: blur(100px); opacity: var(--halo-o); will-change: transform; }
+.bg .b1 { width: 48vmax; height: 48vmax; left: -12vmax; top: -20vmax; background: rgb(var(--net)); animation: halo1 18s ease-in-out infinite alternate; }
+.bg .b2 { width: 42vmax; height: 42vmax; right: -14vmax; bottom: -18vmax; background: rgb(var(--net2)); animation: halo2 22s ease-in-out infinite alternate; }
+.bg .b3 { width: 30vmax; height: 30vmax; left: 40vw; top: 30vh; background: rgb(var(--net)); opacity: calc(var(--halo-o) * .4); animation: halo3 26s ease-in-out infinite alternate; }
+@keyframes halo1 { to { transform: translate(16vw, 12vh) scale(1.2); } }
+@keyframes halo2 { to { transform: translate(-14vw, -10vh) scale(.85); } }
+@keyframes halo3 { to { transform: translate(-20vw, 14vh) scale(1.3); } }
+.bg .scan {
+  position: absolute; left: 0; right: 0; height: 28vh; top: -30vh;
+  background: linear-gradient(to bottom, transparent, rgba(var(--net), .055) 70%, rgba(var(--net), .14) 99%, transparent);
+  animation: scan 9s linear infinite;
 }
-:root[data-theme="light"] .bg .grain { opacity: .12; mix-blend-mode: multiply; }
-body.editing .bg .blob { opacity: calc(var(--mesh-o) * .5); }
+@keyframes scan { to { transform: translateY(140vh); } }
+.bg .vignette { position: absolute; inset: 0; background: radial-gradient(ellipse 120% 90% at 50% 40%, transparent 55%, var(--mesh-base) 100%); }
+:root[data-theme="light"] .bg .vignette { background: radial-gradient(ellipse 120% 90% at 50% 40%, transparent 60%, rgba(242, 245, 249, .9) 100%); }
+body.editing .bg canvas { opacity: .35; }
+body.editing .bg .scan { display: none; }
 
 /* =========================== APPARITION EN DOUCEUR =========================== */
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
@@ -757,34 +755,22 @@ ol.setup { margin: 0 0 18px; padding-left: 20px; color: var(--text2); font-size:
 /* ---------- Écran de verrouillage façon hyprlock ---------- */
 .overlay.lock.hypr {
   flex-direction: column; align-items: center; justify-content: center; gap: 30px; padding: 24px 16px;
-  background: var(--wp-sky2); -webkit-backdrop-filter: none; backdrop-filter: none; overflow: hidden;
-  --wp-sky1: #b9c8ff; --wp-sky2: #fde4d8; --wp-sun: #fff6d6;
-  --wp-m1: color-mix(in oklab, var(--accent) 16%, #c3c8ee); --wp-m2: color-mix(in oklab, var(--accent) 20%, #a2a9dd);
-  --wp-m3: color-mix(in oklab, var(--accent) 22%, #7e86c6); --wp-m4: color-mix(in oklab, var(--accent) 20%, #5b62a6);
-  --wp-star: 0; --glass: rgba(255, 255, 255, .34); --glass-line: rgba(255, 255, 255, .6); --hl-ink: #141a33;
+  background: #02050a; -webkit-backdrop-filter: none; backdrop-filter: none; overflow: hidden;
+  --glass: rgba(4, 10, 16, .55); --glass-line: rgba(var(--net), .28); --hl-ink: #eafff6;
+  --text: #eafff6; --text2: #b7c9c2; --muted: #7d948c; --panel: rgba(8, 16, 22, .75); --panel3: #12202a; --line2: rgba(var(--net), .25);
+  color-scheme: dark;
 }
-:root[data-theme="dark"] .overlay.lock.hypr {
-  --wp-sky1: #05071a; --wp-sky2: color-mix(in oklab, var(--accent) 14%, #1b1842); --wp-sun: color-mix(in oklab, var(--accent) 55%, #ffffff);
-  --wp-m1: color-mix(in oklab, var(--accent) 14%, #22265a); --wp-m2: color-mix(in oklab, var(--accent) 12%, #181b44);
-  --wp-m3: color-mix(in oklab, var(--accent) 10%, #10132f); --wp-m4: #090b1d;
-  --wp-star: 1; --glass: rgba(12, 14, 34, .42); --glass-line: rgba(255, 255, 255, .12); --hl-ink: #f3f5ff;
-}
-.hl-wall { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
-.hl-wall .m { transition: fill .6s; }
-.hl-wall .stars circle { fill: #fff; opacity: calc(var(--wp-star) * var(--o, .7)); animation: twinkle var(--t, 4s) ease-in-out infinite alternate; }
-@keyframes twinkle { to { opacity: calc(var(--wp-star) * .15); } }
-.hl-wall .sun { transform-origin: 1120px 320px; animation: sunpulse 9s ease-in-out infinite alternate; }
-@keyframes sunpulse { to { transform: scale(1.06); } }
-.hl-wall .l2 { animation: sway 26s ease-in-out infinite alternate; } .hl-wall .l3 { animation: sway 34s ease-in-out infinite alternate-reverse; }
-@keyframes sway { to { transform: translateX(-40px); } }
+.hl-matrix { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -2; opacity: .75; }
+.hl-shade { position: absolute; inset: 0; z-index: -1; background: radial-gradient(ellipse 55% 60% at 50% 50%, rgba(2, 5, 10, .88), rgba(2, 5, 10, .35) 70%, rgba(2, 5, 10, .6)); }
 .overlay.lock.hypr .hl-clock { color: var(--hl-ink); animation: drop .8s cubic-bezier(.2, .8, .2, 1) both; }
 @keyframes drop { from { opacity: 0; transform: translateY(-24px); } }
-.overlay.lock.hypr .hl-time { background: none; color: var(--hl-ink); -webkit-background-clip: border-box; background-clip: border-box; text-shadow: 0 6px 40px color-mix(in srgb, var(--accent) 45%, transparent); }
+.overlay.lock.hypr .hl-time { background: none; color: var(--hl-ink); -webkit-background-clip: border-box; background-clip: border-box; font-family: var(--mono); letter-spacing: -6px; text-shadow: 0 0 24px rgba(var(--net), .55), 0 0 80px rgba(var(--net), .3); }
+.overlay.lock.hypr .hl-date { font-family: var(--mono); letter-spacing: 1px; }
 .overlay.lock.hypr .hl-date { color: var(--hl-ink); opacity: .78; }
 .overlay.lock.hypr .hl-card {
   padding: 26px 26px 22px; border-radius: 26px; background: var(--glass); border: 1px solid var(--glass-line);
   -webkit-backdrop-filter: blur(22px) saturate(1.6); backdrop-filter: blur(22px) saturate(1.6);
-  box-shadow: 0 30px 80px rgba(10, 12, 40, .28); animation: rise .7s .12s cubic-bezier(.2, .8, .2, 1) both; color: var(--hl-ink);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .55), 0 0 0 1px rgba(var(--net), .08), 0 0 60px rgba(var(--net), .12); animation: rise .7s .12s cubic-bezier(.2, .8, .2, 1) both; color: var(--hl-ink);
 }
 .overlay.lock.hypr .hl-user { color: var(--hl-ink); }
 .overlay.lock.hypr .hl-hello { color: var(--hl-ink); opacity: .85; }
@@ -820,3 +806,6 @@ ol.setup { margin: 0 0 18px; padding-left: 20px; color: var(--text2); font-size:
 .hl-foot { position: absolute; bottom: 22px; left: 0; right: 0; text-align: center; font: 11px var(--mono); color: var(--muted); }
 .hl-foot .u { color: var(--accent-text); }
 @media (max-height: 560px) { .hl-foot { display: none; } .overlay.lock.hypr { gap: 18px; } }
+/* L'écran de verrouillage est toujours sombre : couleurs de pluie vives quel que soit le thème */
+.overlay.lock.hypr { --net: 110, 255, 205; }
+.overlay.lock.hypr[data-user="hugo"] { --net: 178, 168, 255; }

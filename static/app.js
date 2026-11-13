@@ -172,21 +172,8 @@ function showLogin() {
     const ov = document.createElement("div");
     ov.className = "overlay lock hypr";
     ov.id = "lockOverlay";
-    const stars = Array.from({ length: 70 }, () => `<circle cx="${(Math.random() * 1600).toFixed(0)}" cy="${(Math.random() * 520).toFixed(0)}" r="${(Math.random() * 1.6 + .4).toFixed(1)}" style="--o:${(Math.random() * .7 + .3).toFixed(2)};--t:${(Math.random() * 4 + 2).toFixed(1)}s;animation-delay:-${(Math.random() * 6).toFixed(1)}s"/>`).join("");
     ov.innerHTML = `
-      <svg class="hl-wall" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-        <defs>
-          <linearGradient id="hlSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--wp-sky1)"/><stop offset="1" style="stop-color:var(--wp-sky2)"/></linearGradient>
-          <radialGradient id="hlSun"><stop offset="0" style="stop-color:var(--wp-sun)"/><stop offset=".35" style="stop-color:var(--wp-sun);stop-opacity:.55"/><stop offset="1" style="stop-color:var(--wp-sun);stop-opacity:0"/></radialGradient>
-        </defs>
-        <rect width="1600" height="900" fill="url(#hlSky)"/>
-        <g class="stars">${stars}</g>
-        <circle class="sun" cx="1120" cy="320" r="260" fill="url(#hlSun)"/>
-        <path class="m l1" style="fill:var(--wp-m1)" d="M0 560 L120 500 L260 540 L400 440 L560 520 L700 430 L860 500 L1000 410 L1160 490 L1320 420 L1480 480 L1600 440 V900 H0Z"/>
-        <path class="m l2" style="fill:var(--wp-m2)" d="M-60 640 L180 560 L340 620 L520 520 L700 610 L880 540 L1060 620 L1240 530 L1420 600 L1660 550 V900 H-60Z"/>
-        <path class="m l3" style="fill:var(--wp-m3)" d="M-60 740 C200 680 360 720 520 690 C700 655 860 720 1040 690 C1220 660 1400 700 1660 670 V900 H-60Z"/>
-        <path class="m l4" style="fill:var(--wp-m4)" d="M0 820 C240 780 480 830 760 800 C1040 770 1300 820 1600 790 V900 H0Z"/>
-      </svg>
+      <canvas class="hl-matrix"></canvas><div class="hl-shade"></div>
       <div class="hl-clock"><div class="hl-time" id="hlTime"></div><div class="hl-date" id="hlDate"></div></div>
       <form class="hl-card" autocomplete="off">
         <div class="hl-users">${users.map((u) => `
@@ -203,6 +190,8 @@ function showLogin() {
       </form>
       <div class="hl-foot"><span class="u">ctf://writeups</span> · session verrouillée · <kbd>Entrée</kbd> pour déverrouiller</div>`;
     document.body.appendChild(ov);
+    // pluie Matrix, couleur du compte sélectionné
+    const stopRain = window.CW_FX?.matrix($(".hl-matrix", ov), () => getComputedStyle(ov).getPropertyValue("--net").trim() || "0,229,155") || (() => {});
     const form = $("form", ov), err = $(".login-err", ov), input = $("input", ov);
     const tick = () => {
       const d = new Date();
@@ -232,7 +221,7 @@ function showLogin() {
       const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user: sel.id, password: input.value }) }).catch(() => null);
       form.classList.remove("busy");
       if (r?.ok) {
-        clearInterval(clock);
+        clearInterval(clock); stopRain();
         pref.set("lastUser", sel.id);
         const changed = state.user && state.user !== sel.id;
         setUser(sel.id);
