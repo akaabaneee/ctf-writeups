@@ -1,51 +1,48 @@
-/* ctf://writeups — API pour Vercel (fonction serverless + Vercel Blob privé).
+/* ctf://writeups — API pour Vercel (fonction serverless + base Upstash Redis).
  *
  * Variables d'environnement (Vercel → Settings → Environment Variables) :
- *   BLOB_STORE_ID          ajoutée automatiquement quand on connecte un store Blob au projet
- *                          (auth OIDC ; les anciens stores donnent BLOB_READ_WRITE_TOKEN, accepté aussi)
+ *   KV_REST_API_URL, KV_REST_API_TOKEN   ajoutées automatiquement quand on connecte une base
+ *                          Upstash Redis au projet (Storage → Upstash → Redis). Les noms
+ *                          UPSTASH_REDIS_REST_URL / _TOKEN sont acceptés aussi.
  *   CW_PASSWORD_BENJAMIN   mot de passe du compte benjamin (à défaut : l'ancien CW_PASSWORD)
  *   CW_PASSWORD_HUGO       mot de passe du compte hugo
  *
- * Toutes les routes passent ici grâce aux rewrites de vercel.json (?p=...).
+ * Pourquoi Redis et plus Vercel Blob : l'offre gratuite de Blob ne permet qu'environ 2 000 écritures
+ * par mois ; la sauvegarde automatique l'épuisait en quelques séances et Vercel suspendait le stockage.
+ *
  * Chaque compte a son propre espace : un compte ne peut ni lister, ni lire, ni modifier
  * les writeups, images ou commandes d'un autre (toutes les clés passent par K()).
- * Stockage (sous le préfixe du compte) :
- *   meta/index.json        liste des writeups (métadonnées + texte pour la recherche)
- *   writeups/<id>.json     writeup complet
- *   images/<nom>           images collées
- *   trash/<id>-<ts>.json   writeups supprimés (récupérables)
- *   cheatsheet.json        commandes perso
+ * Clés (préfixe cw:<compte>:) :
+ *   idx            hash  id → métadonnées + texte (liste des writeups, mise à jour atomique)
+ *   w:<id>         writeup complet (JSON)
+ *   img:<nom>      image collée (base64)
+ *   cheat          commandes perso (JSON)
+ *   trash:<id>:<t> writeup supprimé, gardé 30 jours
  */
-import { put, get, del, list } from "@vercel/blob";
 import { createHash, timingSafeEqual, randomBytes } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 
-/* Comptes. benjamin garde l'emplacement d'origine (préfixe vide) : ses writeups existants restent en place. */
 const USERS = {
-  benjamin: { name: "Benjamin", prefix: "", legacy: "CW_PASSWORD" },
-  hugo: { name: "Hugo", prefix: "u/hugo/" },
+  benjamin: { name: "Benjamin", legacy: "CW_PASSWORD" },
+  hugo: { name: "Hugo" },
 };
 const session = new AsyncLocalStorage();          // compte de la requête en cours
-const K = (path) => USERS[session.getStore()].prefix + path;
+const K = (key) => `cw:${session.getStore()}:${key}`;
 
 const META_KEYS = ["title", "ctf", "category", "difficulty", "points", "date", "status", "tags", "flag", "pageWidth", "pageTheme", "pinned"];
 const ID_RE = /^[a-f0-9]{12}$/;
 const IMG_RE = /^[a-z0-9_-]+\.(png|jpe?g|gif|webp|bmp)$/;
 const IMG_EXT = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/bmp": "bmp" };
-const MAX_UPLOAD = 4.3 * 1024 * 1024; // limite de corps des fonctions Vercel : 4,5 Mo
+const MAX_UPLOAD = 4.3 * 1024 * 1024; // limite de corps des fonctions Vercel : 4,5 Mo (≈ 5,8 Mo en base64, sous les 10 Mo d'Upstash)
+const TRASH_TTL = 30 * 24 * 3600;
 
-// Store Blob connecté avec un préfixe perso (ex. MONSTORE_READ_WRITE_TOKEN) : on le récupère quand même
-if (!process.env.BLOB_READ_WRITE_TOKEN) {
-  const k = Object.keys(process.env).find((k) => k.endsWith("_READ_WRITE_TOKEN") && String(process.env[k]).startsWith("vercel_blob_rw_"));
-  if (k) process.env.BLOB_READ_WRITE_TOKEN = process.env[k];
-}
 // Nom de variable insensible à la casse : CW_PASSWORD_HUGO, CW_PASSWORD_hugo, cw_password_Hugo…
 const envCI = (name) => { const k = Object.keys(process.env).find((x) => x.toUpperCase() === name); return k ? process.env[k] : ""; };
 const passwordOf = (u) => (envCI("CW_PASSWORD_" + u.toUpperCase()) || (USERS[u].legacy && process.env[USERS[u].legacy]) || "").trim();
 const userList = () => Object.entries(USERS).map(([id, u]) => ({ id, name: u.name, ready: Boolean(passwordOf(id)) }));
-// Nouveaux stores Blob : BLOB_STORE_ID + jeton OIDC fourni par Vercel ; anciens : BLOB_READ_WRITE_TOKEN
-const hasBlob = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
-const missing = () => [!hasBlob() && "BLOB_STORE_ID", !userList().some((u) => u.ready) && "CW_PASSWORD_BENJAMIN"].filter(Boolean);
+const redisUrl = () => (envCI("KV_REST_API_URL") || envCI("UPSTASH_REDIS_REST_URL")).replace(/\/+$/, "");
+const redisToken = () => envCI("KV_REST_API_TOKEN") || envCI("UPSTASH_REDIS_REST_TOKEN");
+const missing = () => [!(redisUrl() && redisToken()) && "KV_REST_API_URL", !userList().some((u) => u.ready) && "CW_PASSWORD_BENJAMIN"].filter(Boolean);
 const configured = () => missing().length === 0;
 const sha = (s) => createHash("sha256").update(s).digest();
 const sessionToken = (u) => createHash("sha256").update(`cw-session:${u}:${passwordOf(u)}`).digest("hex");
@@ -77,32 +74,36 @@ function sameOrigin(req) {
   return hosts.filter(Boolean).flatMap((h) => h.split(",")).some((h) => h.trim() === host);
 }
 
-/* ---------- Blob ---------- */
-async function readJSON(path) {
-  try {
-    const r = await get(K(path), { access: "private", useCache: false });
-    if (!r || r.statusCode !== 200) return null;
-    return JSON.parse(await new Response(r.stream).text());
-  } catch (e) {
-    if (e?.name === "BlobNotFoundError") return null;
-    throw e;
-  }
+/* ---------- Upstash Redis (API REST, sans dépendance) ---------- */
+class StoreError extends Error {}
+async function redis(path, body) {
+  const r = await fetch(redisUrl() + path, {
+    method: "POST", headers: { authorization: "Bearer " + redisToken(), "content-type": "application/json" }, body: JSON.stringify(body),
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j) throw new StoreError(`base de données : ${j?.error || r.status + " " + r.statusText}`);
+  return j;
 }
-const writeJSON = (path, obj) =>
-  put(K(path), JSON.stringify(obj), { access: "private", addRandomSuffix: false, allowOverwrite: true, contentType: "application/json", cacheControlMaxAge: 60 });
+/* Une commande : cmd("GET", clé) */
+async function cmd(...args) {
+  const j = await redis("", args);
+  if (j.error) throw new StoreError("base de données : " + j.error);
+  return j.result;
+}
+/* Plusieurs commandes atomiques (toutes ou aucune) */
+async function tx(...cmds) {
+  const j = await redis("/multi-exec", cmds);
+  const bad = (Array.isArray(j) ? j : []).find((x) => x?.error);
+  if (!Array.isArray(j) || bad) throw new StoreError("base de données : " + (bad?.error || j?.error || "transaction refusée"));
+  return j.map((x) => x.result);
+}
+const readJSON = async (key) => { const v = await cmd("GET", K(key)); return v == null ? null : JSON.parse(v); };
 
 const plainText = (html) =>
   String(html || "").replace(/<img[^>]*>/gi, " ").replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&")
     .replace(/\s+/g, " ").slice(0, 20000);
 const metaOf = ({ content, ...meta }) => ({ ...meta, text: plainText(content) });
-
-async function updateIndex(fn) {
-  const idx = (await readJSON("meta/index.json")) || [];
-  const next = fn(idx);
-  await writeJSON("meta/index.json", next);
-  return next;
-}
 
 /* ---------- Routes ---------- */
 async function handle(req, method) {
@@ -125,55 +126,23 @@ async function handle(req, method) {
   }
   if (p === "logout") return json({ ok: true }, 200, { "set-cookie": "cw_auth=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0" });
 
-  if (!configured()) return json({ error: "site non configuré : ajoute un store Blob et la variable CW_PASSWORD_BENJAMIN sur Vercel" }, 503);
+  if (!configured()) return json({ error: "site non configuré : connecte une base Upstash Redis et ajoute CW_PASSWORD_BENJAMIN sur Vercel" }, 503);
   if (!user) return json({ error: "non connecté" }, 401);
   if (method !== "GET" && !sameOrigin(req)) return json({ error: "origine refusée" }, 403);
   return session.run(user, () => userRoutes(req, method, p));
 }
 
-/* Liste des writeups, auto-réparatrice.
-   L'index meta/index.json n'est qu'un cache : la vérité, ce sont les fichiers writeups/<id>.json.
-   Deux sauvegardes simultanées (deux onglets, deux appareils) pouvaient chacune réécrire l'index
-   en oubliant le writeup de l'autre, qui disparaissait alors de la liste alors que son fichier
-   existait toujours. On compare donc l'index aux fichiers réellement présents et on le corrige. */
-async function listWriteups() {
-  const idx = (await readJSON("meta/index.json")) || [];
-  const byId = new Map(idx.map((w) => [w.id, w]));
-  const base = K("writeups/");
-  const blobs = [];
-  let cursor;
-  do {
-    const r = await list({ prefix: base, cursor, limit: 1000 });
-    blobs.push(...r.blobs);
-    cursor = r.hasMore ? r.cursor : undefined;
-  } while (cursor);
-  let repaired = blobs.length !== idx.length;
-  const out = await Promise.all(blobs.map(async (b) => {
-    const id = b.pathname.slice(base.length).replace(/\.json$/, "");
-    if (!ID_RE.test(id)) return null;
-    let entry = byId.get(id);
-    // absent de l'index, ou fichier réécrit après la dernière mise à jour de l'index
-    if (!entry || new Date(b.uploadedAt).getTime() > (entry.updated || 0) + 15000) {
-      const doc = await readJSON(`writeups/${id}.json`).catch(() => null);
-      if (doc) { entry = metaOf(doc); repaired = true; }
-    }
-    return entry || null;
-  }));
-  const res = out.filter(Boolean).sort((a, b) => (b.updated || 0) - (a.updated || 0));
-  if (repaired) await writeJSON("meta/index.json", res).catch((e) => console.error("index", e));
-  return res;
-}
-
 /* Routes d'un compte connecté : tout le stockage y est relatif à son espace (K) */
 async function userRoutes(req, method, p) {
-
   // Images
   let m = p.match(/^img\/(.+)$/);
   if (m) {
     if (!IMG_RE.test(m[1])) return json({ error: "nom invalide" }, 400);
-    const r = await get(K("images/" + m[1]), { access: "private" }).catch(() => null);
-    if (!r || r.statusCode !== 200) return json({ error: "introuvable" }, 404);
-    return new Response(r.stream, { headers: { "content-type": r.blob.contentType, "cache-control": "private, max-age=31536000, immutable" } });
+    const b64 = await cmd("GET", K("img:" + m[1]));
+    if (b64 == null) return json({ error: "introuvable" }, 404);
+    const ext = m[1].split(".").pop();
+    const ctype = Object.entries(IMG_EXT).find(([, e]) => e === ext || (ext === "jpeg" && e === "jpg"))?.[0] || "application/octet-stream";
+    return new Response(Buffer.from(b64, "base64"), { headers: { "content-type": ctype, "cache-control": "private, max-age=31536000, immutable", "x-content-type-options": "nosniff" } });
   }
 
   if (p === "upload" && method === "POST") {
@@ -183,29 +152,31 @@ async function userRoutes(req, method, p) {
     const buf = Buffer.from(await req.arrayBuffer());
     if (buf.length > MAX_UPLOAD) return json({ error: "image trop lourde (max 4 Mo)" }, 413);
     const name = `${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${randomBytes(5).toString("hex")}.${ext}`;
-    await put(K("images/" + name), buf, { access: "private", addRandomSuffix: false, contentType: ctype });
+    await cmd("SET", K("img:" + name), buf.toString("base64"));
     return json({ location: "/images/" + name });
   }
 
   if (p === "cheatsheet") {
-    if (method === "GET") return json((await readJSON("cheatsheet.json")) || []);
+    if (method === "GET") return json((await readJSON("cheat")) || []);
     if (method === "PUT") {
       const items = await req.json();
       if (!Array.isArray(items)) return json({ error: "liste attendue" }, 400);
-      await writeJSON("cheatsheet.json", items);
+      await cmd("SET", K("cheat"), JSON.stringify(items));
       return json({ ok: true });
     }
   }
 
   if (p === "writeups") {
-    if (method === "GET") return json(await listWriteups());
+    if (method === "GET") {
+      const vals = (await cmd("HVALS", K("idx"))) || [];
+      return json(vals.map((v) => JSON.parse(v)).sort((a, b) => (b.updated || 0) - (a.updated || 0)));
+    }
     if (method === "POST") {
       const body = await req.json();
       const now = Date.now();
       const doc = Object.fromEntries(META_KEYS.map((k) => [k, body[k] ?? ""]));
       Object.assign(doc, { id: randomBytes(6).toString("hex"), content: body.content || "", tags: body.tags || [], created: now, updated: now });
-      await writeJSON(`writeups/${doc.id}.json`, doc);
-      await updateIndex((idx) => [metaOf(doc), ...idx.filter((w) => w.id !== doc.id)]);
+      await tx(["SET", K("w:" + doc.id), JSON.stringify(doc)], ["HSET", K("idx"), doc.id, JSON.stringify(metaOf(doc))]);
       return json(doc, 201);
     }
   }
@@ -214,23 +185,20 @@ async function userRoutes(req, method, p) {
   if (m) {
     const id = m[1];
     if (!ID_RE.test(id)) return json({ error: "introuvable" }, 404);
-    const path = `writeups/${id}.json`;
-    const doc = await readJSON(path);
+    const doc = await readJSON("w:" + id);
     if (!doc) return json({ error: "introuvable" }, 404);
     if (method === "GET") return json(doc);
     if (method === "PUT") {
       const body = await req.json();
       for (const k of [...META_KEYS, "content"]) if (k in body) doc[k] = body[k];
       doc.updated = Date.now();
-      await writeJSON(path, doc);
-      await updateIndex((idx) => [metaOf(doc), ...idx.filter((w) => w.id !== id)]);
+      // writeup + entrée de liste dans la même transaction : la liste ne peut plus perdre un writeup
+      await tx(["SET", K("w:" + id), JSON.stringify(doc)], ["HSET", K("idx"), id, JSON.stringify(metaOf(doc))]);
       const { content, ...meta } = doc;
       return json(meta);
     }
     if (method === "DELETE") {
-      await writeJSON(`trash/${id}-${Date.now()}.json`, doc); // récupérable
-      await del(K(path));
-      await updateIndex((idx) => idx.filter((w) => w.id !== id));
+      await tx(["SET", K(`trash:${id}:${Date.now()}`), JSON.stringify(doc), "EX", String(TRASH_TTL)], ["DEL", K("w:" + id)], ["HDEL", K("idx"), id]);
       return json({ ok: true });
     }
   }
@@ -240,7 +208,10 @@ async function userRoutes(req, method, p) {
 
 const wrap = (method) => async (req) => {
   try { return await handle(req, method); }
-  catch (e) { console.error(e); return json({ error: "erreur serveur : " + (e?.message || e) }, 500); }
+  catch (e) {
+    console.error(e);
+    return json({ error: e instanceof StoreError ? e.message : "erreur serveur : " + (e?.message || e) }, e instanceof StoreError ? 503 : 500);
+  }
 };
 export const GET = wrap("GET");
 export const POST = wrap("POST");

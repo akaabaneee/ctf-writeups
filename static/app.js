@@ -244,7 +244,7 @@ function showSetup(h = {}) {
       <p>Le site est en ligne, mais il faut lui donner un endroit où enregistrer tes writeups pour toujours. Sur <b>vercel.com</b>, dans ton projet :</p>
       ${miss ? `<p class="login-err">Variable(s) introuvable(s) dans le déploiement actuel${h.env ? ` (<b>${h.env}</b>)` : ""} : ${miss}</p>` : ""}
       <ol class="setup">
-        <li><b>Storage</b> → <b>Create Database</b> → <b>Blob</b> → crée-le et <b>connecte-le</b> à ce projet.</li>
+        <li><b>Storage</b> → <b>Create Database</b> → <b>Upstash</b> → <b>Redis</b> (offre gratuite) → crée-la et <b>connecte-la</b> à ce projet.</li>
         <li><b>Settings</b> → <b>Environment Variables</b> → ajoute <code>CW_PASSWORD_BENJAMIN</code> et <code>CW_PASSWORD_HUGO</code> (un mot de passe long et différent par compte), en cochant bien l'environnement <b>Production</b>.</li>
         <li><b>Deployments</b> → les <b>⋯</b> du dernier déploiement → <b>Redeploy</b>. <b>Obligatoire</b> : une variable ajoutée n'est prise en compte que par un <i>nouveau</i> déploiement, recharger la page ne suffit pas.</li>
       </ol>
@@ -940,6 +940,7 @@ async function openWriteup(id, { push = true } = {}) {
   state.loading = false;
   state.dirty = false;
   setSaveState("saved");
+  { const b = { ...collect(), content: e.getContent() }; delete b.id; delete b.created; delete b.updated; delete b.text; state.lastSaved = JSON.stringify(b); }
   const draft = pref.get(draftKey(id), null);
   if (draft && draft.at > (doc.updated || 0) && draft.doc) {
     // une version plus récente n'avait pas pu être envoyée : on la restaure et on la renvoie
@@ -994,7 +995,7 @@ function markDirty() {
   state.dirty = true;
   setSaveState("dirty");
   clearTimeout(state.timer);
-  state.timer = setTimeout(saveNow, 900);
+  state.timer = setTimeout(saveNow, 2500);   // on attend une vraie pause de frappe avant d'envoyer
 }
 
 async function saveNow() {
@@ -1016,7 +1017,11 @@ async function saveNow() {
       }
       const body = { ...c, content: e.getContent() };
       delete body.id; delete body.created; delete body.updated; delete body.text;
+      // rien n'a changé depuis le dernier envoi (ex. clic sans modification) : pas de requête inutile
+      const sig = JSON.stringify(body);
+      if (sig === state.lastSaved) { if (!state.dirty) setSaveState("saved"); dropDraft(c.id); return; }
       const meta = await api.update(c.id, body);
+      state.lastSaved = sig;
       c.updated = meta.updated;
       const i = state.list.findIndex((w) => w.id === c.id);
       if (i >= 0) state.list.splice(i, 1);
